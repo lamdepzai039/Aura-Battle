@@ -17,7 +17,7 @@ export type EventState = {
   totalRewards: string[];
 };
 
-const EVENT_KEY = 'aura-battle-active-event';
+const EVENT_KEY = 'aura-battle-active-event-v2';
 
 export const ACTIVE_EVENT: EventState = {
   id: 'weekly-aura-event',
@@ -26,9 +26,9 @@ export const ACTIVE_EVENT: EventState = {
   startDate: '2026-09-17T00:00:00.000Z',
   endDate: '2026-09-24T23:59:59.000Z',
   tasks: [
-    { id: 'rounds', title: 'Complete 3 rounds', goal: 3, progress: 2, reward: '150 Coins' },
-    { id: 'streak', title: 'Win 2 matches', goal: 2, progress: 1, reward: '250 XP' },
-    { id: 'challenge', title: 'Trigger 2 aura breaks', goal: 2, progress: 1, reward: 'AURA Token' },
+    { id: 'rounds', title: 'Complete 3 rounds', goal: 3, progress: 0, reward: '150 Coins' },
+    { id: 'streak', title: 'Win 2 matches', goal: 2, progress: 0, reward: '250 XP' },
+    { id: 'challenge', title: 'Trigger 2 aura breaks', goal: 2, progress: 0, reward: 'AURA Token' },
   ],
   claimed: false,
   totalRewards: ['150 Coins', '250 XP', 'AURA Token', 'Sticker Pack'],

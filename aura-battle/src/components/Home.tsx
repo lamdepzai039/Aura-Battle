@@ -102,7 +102,7 @@ export function Home({
         <button className="profile-card" onClick={() => setProfileOpen((open) => !open)} aria-label="Open player profile">
           <span className="avatar avatar-lam">{username.slice(0, 1).toUpperCase()}</span>
           <span className="profile-copy"><strong>{username}</strong><small>#829381 · LV.27</small></span>
-          <span className="profile-rank">MASTER III</span>
+          <span className="profile-rank">BRONZE</span>
           <span className="xp-track"><i /></span>
         </button>
 
@@ -120,7 +120,7 @@ export function Home({
       </header>
 
       {profileOpen && <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="profile-popover">
-        <span className="avatar avatar-lam avatar-large">{username.slice(0, 1).toUpperCase()}</span><div><strong>{username}</strong><p>Master III · 1,842 RP</p></div>
+        <span className="avatar avatar-lam avatar-large">{username.slice(0, 1).toUpperCase()}</span><div><strong>{username}</strong><p>Bronze · 0 RP</p></div>
         <button onClick={() => setProfileOpen(false)}>VIEW PROFILE <span>↗</span></button>
       </motion.div>}
 
@@ -249,7 +249,7 @@ export function Home({
               <span className="rank-symbol">✦</span>
               <div>
                 <small>CURRENT RANK</small>
-                <h2>MASTER III</h2>
+                <h2>BRONZE</h2>
               </div>
               <span className="rank-caret">↗</span>
             </div>
