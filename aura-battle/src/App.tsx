@@ -6,6 +6,7 @@ import { Shop } from './components/Shop';
 import { Guild } from './components/Guild';
 import { PlayMode } from './components/PlayMode';
 import { PlayerSetup } from './components/PlayerSetup';
+import { MutationMap } from './components/MutationMap';
 import { Leaderboard } from './components/Leaderboard';
 import { CameraView } from './components/CameraView';
 import { Countdown } from './components/Countdown';
@@ -22,7 +23,7 @@ import { getSession, getSessionEmail } from './utils/auth';
 import { isAdminAccount } from './utils/playerProfile';
 import type { GameMode, MatchState, MutationLoadout, PlayerId } from './game/types';
 
-type AppPhase = 'login' | 'home' | 'shop' | 'guild' | 'settings' | 'mode_select' | 'camera_check' | 'player_setup' | 'battle' | 'leaderboard';
+type AppPhase = 'login' | 'home' | 'shop' | 'guild' | 'settings' | 'mode_select' | 'camera_check' | 'player_setup' | 'mutation_map' | 'battle' | 'leaderboard';
 const DEV = import.meta.env.DEV;
 
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
   const [username, setUsername] = useState(() => getSession() || 'LAM');
   const [sessionEmail, setSessionEmail] = useState(() => getSessionEmail());
   const [pendingMode, setPendingMode] = useState<GameMode>('local');
+  const [mutationSession, setMutationSession] = useState<{ playerName: string; rivalName: string; loadout: MutationLoadout } | null>(null);
   const recordedRef = useRef(false);
   const { match, videoRef, cameraStatus, enableCamera, attachStreamToVideo, trackerStatus, fps, countdownValue, liveFeedback, lastRecord, auraBreak, debugOpen, setDebugOpen, startMatch, goHome, rematch, continueToNextRound, winner, setPlayerName, debugForceWin, debugSkipRound } = useAuraMatch();
   const challenge = currentChallenge(match);
@@ -49,11 +51,23 @@ export default function App() {
   if (phase === 'guild') return <Guild username={username} onHome={() => setPhase('home')} onShop={() => setPhase('shop')} onSettings={() => setPhase('settings')} />;
   if (phase === 'settings') return <Settings onBack={() => setPhase('home')} onLogout={() => setPhase('login')} onShop={() => setPhase('shop')} onGuild={() => setPhase('guild')} />;
   if (phase === 'leaderboard') return <Leaderboard onBack={() => setPhase('home')} />;
-  if (phase === 'mode_select') return <PlayMode onSelect={(mode) => { setPendingMode(mode); setPhase('camera_check'); }} onBack={() => setPhase('home')} />;
+  if (phase === 'mode_select') return <PlayMode onSelect={(mode) => { setPendingMode(mode); setPhase(mode === 'mutation' ? 'player_setup' : 'camera_check'); }} onBack={() => setPhase('home')} />;
 
   if (phase === 'camera_check') return <div className="fixed inset-0 flex flex-col items-center justify-center px-6 gap-6"><p className="font-display text-xs tracking-[0.3em] text-white/50">CAMERA CHECK</p><div className="w-full max-w-2xl"><CameraView ref={videoRef} status={cameraStatus} onEnable={enableCamera} onVideoReady={attachStreamToVideo} /></div>{cameraStatus === 'granted' && <button onClick={() => setPhase('player_setup')} className="px-8 py-3 rounded-full font-display text-sm tracking-wide bg-cyan-400 text-black hover:bg-cyan-300 transition">CONTINUE</button>}<button onClick={() => setPhase('home')} className="text-xs text-white/40 hover:text-white/70 font-display tracking-widest">← BACK</button></div>;
 
-  if (phase === 'player_setup') return <PlayerSetup mode={pendingMode} onBack={() => setPhase('mode_select')} onStart={(p1, p2, prompt, mutation: MutationLoadout | undefined) => { startMatch(pendingMode, prompt, mutation); setPlayerName('p1', p1); setPlayerName('p2', p2); setPhase('battle'); }} />;
+  if (phase === 'player_setup') return <PlayerSetup mode={pendingMode} onBack={() => setPhase('mode_select')} onStart={(p1, p2, prompt, mutation: MutationLoadout | undefined) => {
+    if (pendingMode === 'mutation' && mutation) {
+      setMutationSession({ playerName: p1, rivalName: p2, loadout: mutation });
+      setPhase('mutation_map');
+      return;
+    }
+    startMatch(pendingMode, prompt, mutation);
+    setPlayerName('p1', p1);
+    setPlayerName('p2', p2);
+    setPhase('battle');
+  }} />;
+
+  if (phase === 'mutation_map' && mutationSession) return <MutationMap playerName={mutationSession.playerName} rivalName={mutationSession.rivalName} loadout={mutationSession.loadout} onHome={() => { setMutationSession(null); setPhase('home'); }} />;
 
   const totalRounds = match.challengeQueue.length;
   return <div className="fixed inset-0 flex flex-col items-center justify-center px-3 md:px-6">
