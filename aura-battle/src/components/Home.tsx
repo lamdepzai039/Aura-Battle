@@ -7,6 +7,7 @@ import { DAILY_LOGIN_REWARDS, claimDailyReward, getDailyLoginState, getLoginDayI
 import { claimEventReward, getActiveEvent, getEventProgress } from '../utils/eventStore';
 import { ClickForAura } from './ClickForAura';
 import { MemeSticker } from './MemeSticker';
+import { getPlayerProfile } from '../utils/playerProfile';
 
 export function Home({
   username,
@@ -25,6 +26,7 @@ export function Home({
   onGuild: () => void;
   onSettings: () => void;
 }) {
+  const profile = getPlayerProfile(username);
   const [chatOpen, setChatOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [activeChat, setActiveChat] = useState('GLOBAL');
@@ -101,8 +103,8 @@ export function Home({
       <header className="home-topbar">
         <button className="profile-card" onClick={() => setProfileOpen((open) => !open)} aria-label="Open player profile">
           <span className="avatar avatar-lam">{username.slice(0, 1).toUpperCase()}</span>
-          <span className="profile-copy"><strong>{username}</strong><small>#829381 · LV.27</small></span>
-          <span className="profile-rank">BRONZE</span>
+          <span className="profile-copy"><strong>{username}</strong><small>#829381 · LV.{profile.level}</small></span>
+          <span className="profile-rank">{profile.rankEmoji} {profile.rank}</span>
           <span className="xp-track"><i /></span>
         </button>
 
@@ -120,7 +122,7 @@ export function Home({
       </header>
 
       {profileOpen && <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="profile-popover">
-        <span className="avatar avatar-lam avatar-large">{username.slice(0, 1).toUpperCase()}</span><div><strong>{username}</strong><p>Bronze · 0 RP</p></div>
+        <span className="avatar avatar-lam avatar-large">{username.slice(0, 1).toUpperCase()}</span><div><strong>{username}</strong><p>{profile.rank} · {profile.rating.toLocaleString()} RP</p></div>
         <button onClick={() => setProfileOpen(false)}>VIEW PROFILE <span>↗</span></button>
       </motion.div>}
 
@@ -249,7 +251,7 @@ export function Home({
               <span className="rank-symbol">✦</span>
               <div>
                 <small>CURRENT RANK</small>
-                <h2>BRONZE</h2>
+                <h2>{profile.rank}</h2>
               </div>
               <span className="rank-caret">↗</span>
             </div>

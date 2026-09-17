@@ -8,13 +8,24 @@ export interface LeaderboardEntry {
 const KEY = 'aura-battle:leaderboard';
 
 export const RANK_TIERS: Array<{ min: number; name: string }> = [
-  { min: 0, name: 'NPC' },
-  { min: 200, name: 'NORMAL' },
-  { min: 400, name: 'COOL' },
-  { min: 600, name: 'AURA' },
-  { min: 750, name: 'SIGMA' },
-  { min: 900, name: 'LEGENDARY' },
-  { min: 1050, name: 'MYTHIC' },
+  { min: 0, name: 'BRONZE I' },
+  { min: 100, name: 'BRONZE II' },
+  { min: 200, name: 'BRONZE III' },
+  { min: 300, name: 'SILVER I' },
+  { min: 450, name: 'SILVER II' },
+  { min: 600, name: 'SILVER III' },
+  { min: 750, name: 'GOLD I' },
+  { min: 950, name: 'GOLD II' },
+  { min: 1150, name: 'GOLD III' },
+  { min: 1350, name: 'PLATINUM I' },
+  { min: 1600, name: 'PLATINUM II' },
+  { min: 1850, name: 'PLATINUM III' },
+  { min: 2150, name: 'DIAMOND I' },
+  { min: 2500, name: 'DIAMOND II' },
+  { min: 2850, name: 'DIAMOND III' },
+  { min: 3250, name: 'MASTER I' },
+  { min: 3700, name: 'MASTER II' },
+  { min: 4200, name: 'MASTER III' },
 ];
 
 export function rankForAura(aura: number): string {

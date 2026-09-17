@@ -19,6 +19,7 @@ import { useAuraMatch } from './game/useAuraMatch';
 import { currentChallenge } from './game/gameState';
 import { recordResult } from './utils/leaderboard';
 import { getSession, getSessionEmail } from './utils/auth';
+import { isAdminAccount } from './utils/playerProfile';
 import type { GameMode, MatchState, MutationLoadout, PlayerId } from './game/types';
 
 type AppPhase = 'login' | 'home' | 'shop' | 'guild' | 'settings' | 'mode_select' | 'camera_check' | 'player_setup' | 'battle' | 'leaderboard';
@@ -44,7 +45,7 @@ export default function App() {
 
   if (phase === 'login') return <Login onAuthenticated={(nextUsername) => { setUsername(nextUsername || 'LAM'); setSessionEmail(getSessionEmail()); setPhase('home'); }} />;
   if (phase === 'home') return <Home username={username} onPlay={() => setPhase('mode_select')} onPractice={() => { setPendingMode('local'); setPhase('camera_check'); }} onLeaderboard={() => setPhase('leaderboard')} onShop={() => setPhase('shop')} onGuild={() => setPhase('guild')} onSettings={() => setPhase('settings')} />;
-  if (phase === 'shop') return <Shop isAdmin={sessionEmail === 'hoanglamnguyen03092014@gmail.com'} onHome={() => setPhase('home')} onLeaderboard={() => setPhase('leaderboard')} onGuild={() => setPhase('guild')} onSettings={() => setPhase('settings')} />;
+  if (phase === 'shop') return <Shop isAdmin={isAdminAccount(username, sessionEmail)} onHome={() => setPhase('home')} onLeaderboard={() => setPhase('leaderboard')} onGuild={() => setPhase('guild')} onSettings={() => setPhase('settings')} />;
   if (phase === 'guild') return <Guild username={username} onHome={() => setPhase('home')} onShop={() => setPhase('shop')} onSettings={() => setPhase('settings')} />;
   if (phase === 'settings') return <Settings onBack={() => setPhase('home')} onLogout={() => setPhase('login')} onShop={() => setPhase('shop')} onGuild={() => setPhase('guild')} />;
   if (phase === 'leaderboard') return <Leaderboard onBack={() => setPhase('home')} />;
