@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
-import type { Challenge } from '../game/types';
+import type { Challenge, MutationLoadout } from '../game/types';
 
-export function RoundIntro({ challenge, roundNumber, totalRounds }: { challenge: Challenge; roundNumber: number; totalRounds: number }) {
+export function RoundIntro({ challenge, roundNumber, totalRounds, mutation }: { challenge: Challenge; roundNumber: number; totalRounds: number; mutation?: MutationLoadout }) {
   return (
     <div className="fixed inset-0 z-40 flex flex-col items-center justify-center bg-[var(--bg-void)] px-6 text-center">
       <div className="absolute inset-0 overflow-hidden">
@@ -38,6 +38,11 @@ export function RoundIntro({ challenge, roundNumber, totalRounds }: { challenge:
       >
         {challenge.description}
       </motion.p>
+      {mutation && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45 }} className="relative mt-5 w-full max-w-md rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-left">
+        <div className="flex items-center justify-between gap-3"><span className="text-[10px] tracking-[0.18em] text-cyan-200">TREND PACK · {mutation.trendPack.title}</span><span className="text-[10px] text-yellow-200">{mutation.mutationId.toUpperCase()}</span></div>
+        <p className="mt-2 text-xs text-white/70">{mutation.trendPack.theme} · {mutation.trendPack.rewardType}</p>
+        <ul className="mt-2 space-y-1 text-[11px] text-white/55">{mutation.trendPack.rules.map((rule) => <li key={rule}>• {rule}</li>)}</ul>
+      </motion.div>}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}

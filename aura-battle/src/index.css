@@ -1159,6 +1159,21 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 @media (max-width: 1100px) { .quest-panel { position: relative; top: auto; right: auto; width: min(calc(100% - 32px), 520px); margin: 16px auto 0; } }
 @media (max-width: 700px) { .quest-panel { width: auto; margin: 16px 15px 0; padding: 15px; border-radius: 18px; }.quest-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }.quest-item { display: block; padding: 9px; }.quest-icon { margin-bottom: 7px; } }
 
+.mutation-setup-panel { margin-top: 16px; border: 1px solid rgba(99, 233, 239, .3); border-radius: 18px; padding: 14px; background: rgba(255, 255, 255, .07); text-align: left; }
+.mutation-setup-panel h2 { margin: 5px 0 12px; color: var(--party-ink); font-size: 15px; }
+.mutation-archetypes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.mutation-archetypes button, .mutation-options button { border: 1px solid rgba(255, 210, 255, .22); border-radius: 10px; color: var(--party-muted); background: rgba(40, 5, 75, .28); cursor: pointer; }
+.mutation-archetypes button { padding: 8px 5px; font-size: 8px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.mutation-archetypes button.active, .mutation-options button.active { border-color: var(--party-blue); color: var(--party-ink); background: rgba(99, 233, 239, .16); }
+.mutation-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; margin-top: 9px; }
+.mutation-options button { display: grid; gap: 4px; padding: 9px; text-align: left; }
+.mutation-options strong { color: var(--party-ink); font-size: 9px; letter-spacing: .08em; }
+.mutation-options small { color: var(--party-muted); font-size: 9px; line-height: 1.3; }
+.trend-select-label { display: grid; gap: 6px; margin-top: 12px; color: var(--party-muted); font-size: 8px; font-weight: 900; letter-spacing: .12em; }
+.trend-select-label select { min-width: 0; border: 1px solid rgba(255, 210, 255, .25); border-radius: 9px; padding: 9px; color: var(--party-ink); background: rgba(40, 5, 75, .55); font: inherit; font-size: 10px; }
+.mutation-rule-preview { display: grid; gap: 5px; margin-top: 10px; color: var(--party-muted); font-size: 9px; line-height: 1.35; }
+.mutation-rule-preview strong { color: var(--party-yellow); font-size: 10px; letter-spacing: .08em; }
+
 .click-aura-game { margin-top: 18px; border: 1px solid rgba(99, 233, 239, .38); border-radius: 18px; padding: 14px; background: linear-gradient(135deg, rgba(99, 233, 239, .12), rgba(198, 107, 255, .14)); }
 .click-aura-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .click-aura-heading h3 { margin: 5px 0 0; color: var(--party-ink); font-size: 15px; letter-spacing: .1em; }

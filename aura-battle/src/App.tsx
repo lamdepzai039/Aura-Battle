@@ -19,7 +19,7 @@ import { useAuraMatch } from './game/useAuraMatch';
 import { currentChallenge } from './game/gameState';
 import { recordResult } from './utils/leaderboard';
 import { getSession, getSessionEmail } from './utils/auth';
-import type { GameMode, MatchState, PlayerId } from './game/types';
+import type { GameMode, MatchState, MutationLoadout, PlayerId } from './game/types';
 
 type AppPhase = 'login' | 'home' | 'shop' | 'guild' | 'settings' | 'mode_select' | 'camera_check' | 'player_setup' | 'battle' | 'leaderboard';
 const DEV = import.meta.env.DEV;
@@ -52,11 +52,11 @@ export default function App() {
 
   if (phase === 'camera_check') return <div className="fixed inset-0 flex flex-col items-center justify-center px-6 gap-6"><p className="font-display text-xs tracking-[0.3em] text-white/50">CAMERA CHECK</p><div className="w-full max-w-2xl"><CameraView ref={videoRef} status={cameraStatus} onEnable={enableCamera} onVideoReady={attachStreamToVideo} /></div>{cameraStatus === 'granted' && <button onClick={() => setPhase('player_setup')} className="px-8 py-3 rounded-full font-display text-sm tracking-wide bg-cyan-400 text-black hover:bg-cyan-300 transition">CONTINUE</button>}<button onClick={() => setPhase('home')} className="text-xs text-white/40 hover:text-white/70 font-display tracking-widest">← BACK</button></div>;
 
-  if (phase === 'player_setup') return <PlayerSetup mode={pendingMode} onBack={() => setPhase('mode_select')} onStart={(p1, p2, prompt) => { startMatch(pendingMode, prompt); setPlayerName('p1', p1); setPlayerName('p2', p2); setPhase('battle'); }} />;
+  if (phase === 'player_setup') return <PlayerSetup mode={pendingMode} onBack={() => setPhase('mode_select')} onStart={(p1, p2, prompt, mutation: MutationLoadout | undefined) => { startMatch(pendingMode, prompt, mutation); setPlayerName('p1', p1); setPlayerName('p2', p2); setPhase('battle'); }} />;
 
   const totalRounds = match.challengeQueue.length;
   return <div className="fixed inset-0 flex flex-col items-center justify-center px-3 md:px-6">
-    {match.screen === 'round_intro' && challenge && <RoundIntro challenge={challenge} roundNumber={match.roundIndex + 1} totalRounds={totalRounds} />}
+    {match.screen === 'round_intro' && challenge && <RoundIntro challenge={challenge} roundNumber={match.roundIndex + 1} totalRounds={totalRounds} mutation={match.mutation} />}
     {match.screen === 'round_result' && lastRecord && <RoundResult record={lastRecord} playerNames={{ p1: match.players.p1.name, p2: match.players.p2.name }} onContinue={continueToNextRound} isFinal={match.roundIndex + 1 >= totalRounds} />}
     {match.screen === 'final_result' && <FinalResult match={match} winner={winner} onRematch={rematch} onNewBattle={() => setPhase('home')} onShare={() => shareResult(match, winner)} />}
     {(match.screen === 'challenge' || match.screen === 'countdown') && <div className="relative w-full max-w-4xl"><div className="flex items-center justify-between mb-2 px-1"><span className="font-display text-xs text-white/50 tracking-widest">ROUND {match.roundIndex + 1}/{totalRounds}</span>{challenge && <span className="font-display text-xs text-white/50 tracking-widest">{challenge.shortLabel}</span>}</div><CameraView ref={videoRef} status={cameraStatus} onEnable={enableCamera} onVideoReady={attachStreamToVideo} splitView={match.mode === 'local'}><ScoreDisplay playerName={match.players.p1.name} aura={match.players.p1.aura} feedback={liveFeedback.p1} align="left" /><ScoreDisplay playerName={match.players.p2.name} aura={match.players.p2.aura} feedback={liveFeedback.p2} align="right" /><Countdown value={countdownValue} /></CameraView></div>}

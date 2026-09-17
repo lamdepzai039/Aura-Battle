@@ -110,6 +110,31 @@ export interface ChallengeFinalContext {
 
 export type GameMode = 'local' | 'ai' | 'online' | 'mutation';
 
+export type MutationArchetype = 'mobility' | 'stability' | 'volatility';
+
+export interface MutationOption {
+  id: string;
+  name: string;
+  archetype: MutationArchetype;
+  description: string;
+  effect: string;
+}
+
+export interface TrendPack {
+  id: string;
+  title: string;
+  theme: string;
+  rules: string[];
+  rewardType: string;
+  version: number;
+}
+
+export interface MutationLoadout {
+  archetype: MutationArchetype;
+  mutationId: string;
+  trendPack: TrendPack;
+}
+
 export type Screen =
   | 'home'
   | 'camera_check'
@@ -133,4 +158,5 @@ export interface MatchState {
   challengeQueue: Challenge[];
   history: RoundRecord[];
   screen: Screen;
+  mutation?: MutationLoadout;
 }

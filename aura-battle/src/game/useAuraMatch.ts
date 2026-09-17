@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import type { Challenge, GameMode, PlayerId, RoundRecord, ScoreEvent, TrackingFrame } from './types';
+import type { Challenge, GameMode, MutationLoadout, PlayerId, RoundRecord, ScoreEvent, TrackingFrame } from './types';
 import { scoreLandmarkFrame } from '../scoring/landmarkAI';
 import { Tracker, type TrackerLoadProgress } from '../vision/tracker';
 import { createInitialMatch, currentChallenge, matchReducer, overallWinner } from './gameState';
@@ -84,12 +84,12 @@ export function useAuraMatch() {
 
   // ---------------- Match lifecycle ----------------
 
-  const startMatch = useCallback((mode: GameMode, prompt?: string) => {
+  const startMatch = useCallback((mode: GameMode, prompt?: string, mutation?: MutationLoadout) => {
     const queue = buildDefaultQueue(prompt);
     trackerRef.current?.dispose();
     trackerRef.current = new Tracker(setTrackerStatus, mode === 'local');
     introStartedForRef.current = -1;
-    dispatch({ type: 'RESET', mode, queue });
+    dispatch({ type: 'RESET', mode, queue, mutation });
   }, []);
 
   const goHome = useCallback(() => {

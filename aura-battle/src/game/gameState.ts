@@ -1,6 +1,6 @@
-import type { Challenge, GameMode, MatchState, PlayerId, RoundRecord, Screen } from './types';
+import type { Challenge, GameMode, MatchState, MutationLoadout, PlayerId, RoundRecord, Screen } from './types';
 
-export function createInitialMatch(mode: GameMode, queue: Challenge[]): MatchState {
+export function createInitialMatch(mode: GameMode, queue: Challenge[], mutation?: MutationLoadout): MatchState {
   return {
     mode,
     players: {
@@ -11,6 +11,7 @@ export function createInitialMatch(mode: GameMode, queue: Challenge[]): MatchSta
     challengeQueue: queue,
     history: [],
     screen: 'round_intro',
+    mutation,
   };
 }
 
@@ -19,7 +20,7 @@ export type MatchAction =
   | { type: 'APPLY_ROUND_RESULT'; record: RoundRecord }
   | { type: 'NEXT_ROUND' }
   | { type: 'SET_PLAYER_NAME'; playerId: PlayerId; name: string }
-  | { type: 'RESET'; mode: GameMode; queue: Challenge[] };
+  | { type: 'RESET'; mode: GameMode; queue: Challenge[]; mutation?: MutationLoadout };
 
 export function matchReducer(state: MatchState, action: MatchAction): MatchState {
   switch (action.type) {
@@ -55,7 +56,7 @@ export function matchReducer(state: MatchState, action: MatchAction): MatchState
         },
       };
     case 'RESET':
-      return createInitialMatch(action.mode, action.queue);
+      return createInitialMatch(action.mode, action.queue, action.mutation);
     default:
       return state;
   }
