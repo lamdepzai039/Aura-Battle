@@ -1135,7 +1135,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .quest-toggle-button { border-color: var(--party-blue) !important; background: rgba(99, 233, 239, .08) !important; }
 .quest-toggle-button span { color: var(--party-yellow) !important; }
 .quest-panel-backdrop { position: fixed; inset: 0; z-index: 30; background: transparent; backdrop-filter: none; }
-.quest-panel { position: absolute; z-index: 31; top: 82px; right: clamp(18px, 2vw, 30px); width: 252px; padding: 18px; border: 2px solid var(--party-line); border-radius: 22px; background: linear-gradient(145deg, rgba(70, 20, 112, .9), rgba(111, 22, 123, .78)); box-shadow: var(--party-shadow); backdrop-filter: blur(12px); }
+.quest-panel { position: absolute; z-index: 31; top: 54px; right: clamp(18px, 2vw, 30px); width: 252px; padding: 18px; border: 2px solid var(--party-line); border-radius: 22px; background: linear-gradient(145deg, rgba(70, 20, 112, .9), rgba(111, 22, 123, .78)); box-shadow: var(--party-shadow); backdrop-filter: blur(12px); }
 .quest-heading, .quest-event-label, .quest-item-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .quest-heading { align-items: flex-start; }
 .quest-heading h2 { margin: 5px 0 0; color: var(--party-ink); font-size: 20px; letter-spacing: .1em; }
