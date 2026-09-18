@@ -148,4 +148,65 @@ export function getQuestBoardForPlayer(playerId: string): EventTask[] {
   return getActiveEvent(playerId).tasks;
 }
 
+export type MatchProgressSummary = {
+  wins: number;
+  rounds: number;
+  aura: number;
+  auraBreaks: number;
+  localMatches: number;
+  challengeRounds: number;
+  perfectCounters: number;
+  mode?: string;
+};
+
+export function addEventProgress(playerId = 'guest', summary: Partial<MatchProgressSummary> = {}): EventState {
+  const event = readEventState(playerId);
+  const nextTasks = event.tasks.map((task) => {
+    const delta = (() => {
+      switch (task.id.split('-')[1]) {
+        case '01': return summary.wins ? Math.min(task.goal, summary.wins) : 0;
+        case '02': return summary.rounds ? Math.min(task.goal, summary.rounds) : 0;
+        case '03': return summary.auraBreaks ? Math.min(task.goal, summary.auraBreaks) : 0;
+        case '04': return summary.aura ? Math.min(task.goal, Math.round(summary.aura)) : 0;
+        case '05': return summary.localMatches ? Math.min(task.goal, summary.localMatches) : 0;
+        case '06': return summary.challengeRounds ? Math.min(task.goal, summary.challengeRounds) : 0;
+        case '07': return summary.auraBreaks ? Math.min(task.goal, summary.auraBreaks) : 0;
+        case '08': return summary.rounds ? Math.min(task.goal, summary.rounds) : 0;
+        case '09': return summary.aura ? Math.min(task.goal, Math.round(summary.aura)) : 0;
+        case '10': return summary.wins ? Math.min(task.goal, summary.wins) : 0;
+        case '11': return summary.challengeRounds ? Math.min(task.goal, summary.challengeRounds) : 0;
+        case '12': return summary.mode === 'mutation' ? 1 : 0;
+        case '13': return summary.wins ? Math.min(task.goal, summary.wins) : 0;
+        case '14': return summary.auraBreaks ? Math.min(task.goal, summary.auraBreaks) : 0;
+        case '15': return summary.aura ? Math.min(task.goal, Math.round(summary.aura)) : 0;
+        case '16': return summary.challengeRounds ? Math.min(task.goal, summary.challengeRounds) : 0;
+        case '17': return summary.localMatches ? Math.min(task.goal, summary.localMatches) : 0;
+        case '18': return summary.aura ? Math.min(task.goal, Math.round(summary.aura)) : 0;
+        case '19': return summary.auraBreaks ? Math.min(task.goal, summary.auraBreaks) : 0;
+        case '20': return summary.challengeRounds ? Math.min(task.goal, summary.challengeRounds) : 0;
+        case '21': return summary.wins ? Math.min(task.goal, summary.wins) : 0;
+        case '22': return summary.mode === 'online' ? 1 : 0;
+        case '23': return summary.aura ? Math.min(task.goal, Math.round(summary.aura)) : 0;
+        case '24': return summary.rounds ? Math.min(task.goal, summary.rounds) : 0;
+        case '25': return summary.perfectCounters ? Math.min(task.goal, summary.perfectCounters) : 0;
+        case '26': return summary.mode ? 1 : 0;
+        case '27': return summary.mode === 'mutation' ? 1 : 0;
+        case '28': return summary.rounds ? Math.min(task.goal, summary.rounds) : 0;
+        case '29': return summary.aura ? Math.min(task.goal, Math.round(summary.aura)) : 0;
+        case '30': return summary.wins ? Math.min(task.goal, summary.wins) : 0;
+        default:
+          return 0;
+      }
+    })();
+
+    if (delta <= 0) return task;
+    const nextProgress = Math.min(task.goal, task.progress + delta);
+    return { ...task, progress: nextProgress };
+  });
+
+  const updated = { ...event, tasks: nextTasks };
+  writeEventState(updated);
+  return updated;
+}
+
 export const ACTIVE_EVENT = createDefaultEvent('guest');

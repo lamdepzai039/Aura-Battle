@@ -84,8 +84,8 @@ export function useAuraMatch() {
 
   // ---------------- Match lifecycle ----------------
 
-  const startMatch = useCallback((mode: GameMode, prompt?: string, mutation?: MutationLoadout) => {
-    const queue = buildDefaultQueue(prompt);
+  const startMatch = useCallback((mode: GameMode, prompt?: string, mutation?: MutationLoadout, seed?: number) => {
+    const queue = mode === 'online' ? buildDefaultQueue(prompt, seed ?? Date.now()) : buildDefaultQueue(prompt);
     trackerRef.current?.dispose();
     trackerRef.current = new Tracker(setTrackerStatus, mode === 'local');
     introStartedForRef.current = -1;

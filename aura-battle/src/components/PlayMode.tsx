@@ -5,13 +5,23 @@ import { resolveLobbyUrl, sanitizeRoomCode, type OnlineRoomState } from '../util
 
 type QueueMode = '1V1' | 'AURA MUTATION' | '2V2' | '3V3' | 'RANKED' | 'ROOM';
 
-export function PlayMode({ username, onSelect, onBack }: { username?: string; onSelect: (mode: GameMode) => void; onBack: () => void }) {
+type OnlineBattleContext = {
+  roomCode: string;
+  host: string;
+  guest: string | null;
+  isHost: boolean;
+  phase: OnlineRoomState['phase'];
+};
+
+export function PlayMode({ username, onSelect, onBack }: { username?: string; onSelect: (mode: GameMode, onlineContext?: OnlineBattleContext) => void; onBack: () => void }) {
   const [mode, setMode] = useState<QueueMode>('1V1');
   const [roomCode, setRoomCode] = useState('');
   const [notice, setNotice] = useState('');
   const [room] = useState(() => getLocalRoom());
   const [onlineRoom, setOnlineRoom] = useState<OnlineRoomState | null>(null);
   const [socketStatus, setSocketStatus] = useState<'offline' | 'connecting' | 'ready'>('offline');
+  const [isHost, setIsHost] = useState(false);
+  const [selfReady, setSelfReady] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
   const playerName = username || 'PLAYER';
 
@@ -30,11 +40,45 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
 
     nextSocket.onmessage = (event) => {
       try {
-        const payload = JSON.parse(event.data) as { type?: string; room?: OnlineRoomState; message?: string };
+        const payload = JSON.parse(event.data) as { type?: string; room?: OnlineRoomState; message?: string; you?: 'host' | 'guest' };
         if (payload.type === 'room_state' && payload.room) {
           setOnlineRoom(payload.room);
           setRoomCode(payload.room.code);
+          const isCurrentHost = payload.room.host === playerName || payload.you === 'host';
+          const isCurrentGuest = payload.room.guest === playerName || payload.you === 'guest';
+          setIsHost(isCurrentHost);
+          setSelfReady(isCurrentHost ? payload.room.hostReady : isCurrentGuest ? payload.room.guestReady : false);
+
+          if (payload.room.phase === 'playing') {
+            setNotice(`Battle live in room ${payload.room.code}.`);
+            onSelect('online', {
+              roomCode: payload.room.code,
+              host: payload.room.host,
+              guest: payload.room.guest,
+              isHost: isCurrentHost,
+              phase: payload.room.phase,
+            });
+            return;
+          }
+
           setNotice(payload.room.guest ? `${payload.room.host} vs ${payload.room.guest}` : `Room ${payload.room.code} is waiting for a challenger.`);
+          return;
+        }
+
+        if (payload.type === 'match_start' && payload.room) {
+          setOnlineRoom(payload.room);
+          setRoomCode(payload.room.code);
+          const currentPlayerIsHost = payload.room.host === playerName;
+          setIsHost(currentPlayerIsHost);
+          setSelfReady(currentPlayerIsHost ? payload.room.hostReady : payload.room.guestReady);
+          setNotice(`${payload.room.host} vs ${payload.room.guest ?? 'rival'} · battle started.`);
+          onSelect('online', {
+            roomCode: payload.room.code,
+            host: payload.room.host,
+            guest: payload.room.guest,
+            isHost: currentPlayerIsHost,
+            phase: payload.room.phase,
+          });
           return;
         }
 
@@ -81,6 +125,8 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
       setNotice('Lobby server is not connected yet.');
       return;
     }
+    setIsHost(true);
+    setSelfReady(false);
     socket.send(JSON.stringify({ type: 'create_room', username: playerName }));
     setNotice('Creating room...');
   }
@@ -98,8 +144,36 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
       return;
     }
 
+    setIsHost(false);
+    setSelfReady(false);
     socket.send(JSON.stringify({ type: 'join_room', code, username: playerName }));
     setNotice(`Joining room ${code}...`);
+  }
+
+  function toggleReady() {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      setNotice('Lobby server is not connected yet.');
+      return;
+    }
+    const nextReady = !selfReady;
+    setSelfReady(nextReady);
+    socket.send(JSON.stringify({ type: 'set_ready', ready: nextReady }));
+    setNotice(nextReady ? 'You are ready to battle.' : 'You left the ready state.');
+  }
+
+  function startOnlineBattle() {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      setNotice('Lobby server is not connected yet.');
+      return;
+    }
+    if (!onlineRoom?.guest) {
+      setNotice('You need a challenger before starting the match.');
+      return;
+    }
+    socket.send(JSON.stringify({ type: 'start_battle' }));
+    setNotice('Starting battle...');
   }
 
   async function copyRoomCode() {
@@ -165,8 +239,16 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
               {(onlineRoom || room) && (
                 <div className="room-created">
                   <strong>ROOM {roomLabel}</strong>
-                  <span>{onlineRoom ? (onlineRoom.guest ? `MATCH READY · ${onlineRoom.host} vs ${onlineRoom.guest}` : 'WAITING FOR PLAYER') : 'WAITING FOR PLAYER · LOCAL ROOM'}</span>
-                  <button type="button" onClick={copyRoomCode}>COPY CODE</button>
+                  <span>{onlineRoom ? (onlineRoom.phase === 'playing' ? `MATCH LIVE · ${onlineRoom.host} vs ${onlineRoom.guest ?? 'RIVAL'}` : onlineRoom.guest ? `${onlineRoom.host} vs ${onlineRoom.guest}` : 'WAITING FOR PLAYER') : 'WAITING FOR PLAYER · LOCAL ROOM'}</span>
+                  <div className="room-actions compact">
+                    <button type="button" onClick={copyRoomCode}>COPY CODE</button>
+                    {onlineRoom && onlineRoom.phase !== 'playing' && (
+                      <button type="button" onClick={toggleReady}>{selfReady ? 'UNREADY' : 'READY UP'}</button>
+                    )}
+                    {onlineRoom && isHost && onlineRoom.guest && onlineRoom.phase !== 'playing' && (
+                      <button type="button" onClick={startOnlineBattle}>START BATTLE</button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -200,7 +282,13 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
             <div className="mode-ready">
               <strong>ONLINE LOBBY READY</strong>
               <span>{notice || 'Connect via the room code server to find a rival.'}</span>
-              <button onClick={() => onSelect('online')}>OPEN ONLINE BATTLE <span>↗</span></button>
+              <button onClick={() => onSelect('online', onlineRoom ? {
+                roomCode: onlineRoom.code,
+                host: onlineRoom.host,
+                guest: onlineRoom.guest,
+                isHost,
+                phase: onlineRoom.phase,
+              } : undefined)}>OPEN ONLINE BATTLE <span>↗</span></button>
             </div>
           )}
 

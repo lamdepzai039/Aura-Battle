@@ -14,6 +14,16 @@ import { makeCustomAuraChallenge } from './challengeCustomAura';
  * each time they're queued, so both live in one lookup keyed by id. */
 export type ChallengeFactory = () => Challenge;
 
+function createSeededRandom(seed: number) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t) >>> 0;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export const STATIC_CHALLENGES: Challenge[] = [
   challenge67,
   challengeFreeze,
@@ -31,10 +41,11 @@ export const DYNAMIC_CHALLENGE_FACTORIES: ChallengeFactory[] = [
 /** Builds the default MVP round order (spec §41 Phase 3-4 set), ending on
  * Custom Aura. `customPrompt` is whatever the player typed for the final
  * freeform round. */
-export function buildDefaultQueue(customPrompt?: string): Challenge[] {
+export function buildDefaultQueue(customPrompt?: string, seed?: number): Challenge[] {
+  const random = seed === undefined ? Math.random : createSeededRandom(seed);
   const challenges: Challenge[] = [
     challenge67,
-    makeHandGestureChallenge(pickRandomGesture()),
+    makeHandGestureChallenge(pickRandomGesture(random)),
     makeMirrorChallenge(),
     challengeFreeze,
     challengeMewing,
@@ -43,16 +54,21 @@ export function buildDefaultQueue(customPrompt?: string): Challenge[] {
     challengeAuraFarming,
   ];
   for (let index = challenges.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
+    const swapIndex = Math.floor(random() * (index + 1));
     [challenges[index], challenges[swapIndex]] = [challenges[swapIndex], challenges[index]];
   }
   return [...challenges, makeCustomAuraChallenge(customPrompt ?? 'Do the most impressive freestyle you can think of.')];
 }
 
 /** Builds a short 4-round practice/MVP queue (spec §41 Phase 3 MVP set). */
-export function buildMvpQueue(): Challenge[] {
-  const queue = [challenge67, challengeFreeze, makeHandGestureChallenge(pickRandomGesture()), makeMirrorChallenge()];
-  return queue.sort(() => Math.random() - 0.5);
+export function buildMvpQueue(seed?: number): Challenge[] {
+  const random = seed === undefined ? Math.random : createSeededRandom(seed);
+  const queue = [challenge67, challengeFreeze, makeHandGestureChallenge(pickRandomGesture(random)), makeMirrorChallenge()];
+  for (let index = queue.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [queue[index], queue[swapIndex]] = [queue[swapIndex], queue[index]];
+  }
+  return queue;
 }
 
 export function allTrackingRequirements(queue: Challenge[]) {

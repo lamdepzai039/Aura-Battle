@@ -1,17 +1,28 @@
+export type OnlineRoomPhase = 'waiting' | 'ready' | 'playing';
+
 export type OnlineRoomState = {
   code: string;
   host: string;
   guest: string | null;
   status: 'waiting' | 'ready';
+  phase: OnlineRoomPhase;
   createdAt: string;
+  hostReady: boolean;
+  guestReady: boolean;
+  startedAt: string | null;
+  matchSeed: number | null;
 };
 
 export type LobbyMessage =
-  | { type: 'room_state'; room: OnlineRoomState }
+  | { type: 'room_state'; room: OnlineRoomState; you?: 'host' | 'guest' }
+  | { type: 'match_start'; room: OnlineRoomState; seed: number | null; startedAt: string | null }
   | { type: 'pong' }
   | { type: 'error'; message: string }
   | { type: 'create_room'; username?: string }
   | { type: 'join_room'; code: string; username?: string }
+  | { type: 'set_ready'; ready: boolean }
+  | { type: 'start_battle' }
+  | { type: 'rejoin_room'; code: string; username?: string }
   | { type: 'ping' };
 
 export function generateRoomCode() {
@@ -61,7 +72,11 @@ export function isRoomJoinPayload(value: unknown): value is { code: string; user
 }
 
 export function isRoomState(value: unknown): value is OnlineRoomState {
-  return !!value && typeof value === 'object' && 'code' in value && 'host' in value && 'status' in value;
+  return !!value && typeof value === 'object' && 'code' in value && 'host' in value && 'status' in value && 'phase' in value;
+}
+
+export function isMatchStartMessage(value: unknown): value is Extract<LobbyMessage, { type: 'match_start' }> {
+  return !!value && typeof value === 'object' && 'type' in value && value.type === 'match_start' && 'room' in value;
 }
 
 export function openLobbySocket(

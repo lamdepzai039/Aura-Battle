@@ -12,8 +12,8 @@ const GESTURE_LABELS: Record<GestureName, string> = {
   unknown: '?',
 };
 
-export function pickRandomGesture(): GestureName {
-  return GESTURES[Math.floor(Math.random() * GESTURES.length)];
+export function pickRandomGesture(random = Math.random): GestureName {
+  return GESTURES[Math.floor(random() * GESTURES.length)];
 }
 
 export function gestureLabel(g: GestureName): string {
