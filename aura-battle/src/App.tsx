@@ -51,7 +51,7 @@ export default function App() {
   if (phase === 'guild') return <Guild username={username} onHome={() => setPhase('home')} onShop={() => setPhase('shop')} onSettings={() => setPhase('settings')} />;
   if (phase === 'settings') return <Settings onBack={() => setPhase('home')} onLogout={() => setPhase('login')} onShop={() => setPhase('shop')} onGuild={() => setPhase('guild')} />;
   if (phase === 'leaderboard') return <Leaderboard onBack={() => setPhase('home')} />;
-  if (phase === 'mode_select') return <PlayMode onSelect={(mode) => { setPendingMode(mode); setPhase(mode === 'mutation' ? 'player_setup' : 'camera_check'); }} onBack={() => setPhase('home')} />;
+  if (phase === 'mode_select') return <PlayMode username={username} onSelect={(mode) => { setPendingMode(mode); setPhase(mode === 'mutation' ? 'player_setup' : 'camera_check'); }} onBack={() => setPhase('home')} />;
 
   if (phase === 'camera_check') return <div className="fixed inset-0 flex flex-col items-center justify-center px-6 gap-6"><p className="font-display text-xs tracking-[0.3em] text-white/50">CAMERA CHECK</p><div className="w-full max-w-2xl"><CameraView ref={videoRef} status={cameraStatus} onEnable={enableCamera} onVideoReady={attachStreamToVideo} /></div>{cameraStatus === 'granted' && <button onClick={() => setPhase('player_setup')} className="px-8 py-3 rounded-full font-display text-sm tracking-wide bg-cyan-400 text-black hover:bg-cyan-300 transition">CONTINUE</button>}<button onClick={() => setPhase('home')} className="text-xs text-white/40 hover:text-white/70 font-display tracking-widest">← BACK</button></div>;
 

@@ -13,9 +13,8 @@ export function ModeSelect({ onSelect, onBack }: { onSelect: (mode: GameMode) =>
       <ModeCard title="AI BATTLE" desc="One player vs an AI-generated opponent score." onClick={() => onSelect('ai')} />
       <ModeCard
         title="ONLINE BATTLE"
-        desc="Room-code multiplayer — architecture ready, matchmaking server not connected in this build."
+        desc="Room-code multiplayer using the local WebSocket lobby server."
         onClick={() => onSelect('online')}
-        disabled
       />
 
       <button onClick={onBack} className="mt-4 text-xs text-white/40 hover:text-white/70 font-display tracking-widest">
