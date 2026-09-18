@@ -33,6 +33,7 @@ export function Home({
   const [message, setMessage] = useState('');
   const [socialPanel, setSocialPanel] = useState<'friends' | 'mail' | null>(null);
   const [eventOpen, setEventOpen] = useState(false);
+  const [questOpen, setQuestOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>(() => getMessages('GLOBAL'));
   const [chatNotice, setChatNotice] = useState('');
   const [claimNotice, setClaimNotice] = useState('');
@@ -56,13 +57,16 @@ export function Home({
   }, []);
 
   useEffect(() => {
-    if (!eventOpen) return undefined;
+    if (!eventOpen && !questOpen) return undefined;
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') setEventOpen(false);
+      if (event.key === 'Escape') {
+        setEventOpen(false);
+        setQuestOpen(false);
+      }
     }
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [eventOpen]);
+  }, [eventOpen, questOpen]);
 
   function sendMessage(event: FormEvent) {
     event.preventDefault();
@@ -115,6 +119,10 @@ export function Home({
               <span>✦</span>
               <b className="pulse-dot">•</b>
               <small>EVENT</small>
+            </button>
+            <button className="icon-action quest-toggle-button" aria-label="Toggle quest panel" onClick={() => setQuestOpen((open) => !open)}>
+              <span>◈</span>
+              <small>QUEST</small>
             </button>
           </div>
           <button className="icon-action" aria-label="Open mail" onClick={() => setSocialPanel('mail')}><span>✉</span><small>INBOX</small></button>
@@ -192,31 +200,35 @@ export function Home({
         <small className="chat-note">{chatNotice || 'Be respectful · 80 character limit · local chat mode'}</small>
       </aside>
 
-      <aside className="quest-panel" aria-labelledby="quest-title">
-        <div className="quest-heading">
-          <div><span className="eyebrow">ACTIVE OBJECTIVES</span><h2 id="quest-title">QUESTS</h2></div>
-          <span className="quest-mark">✦</span>
+      {questOpen && (
+        <div className="quest-panel-backdrop" onClick={() => setQuestOpen(false)}>
+          <aside className="quest-panel" aria-labelledby="quest-title" onClick={(event) => event.stopPropagation()}>
+            <div className="quest-heading">
+              <div><span className="eyebrow">ACTIVE OBJECTIVES</span><h2 id="quest-title">QUESTS</h2></div>
+              <button type="button" className="quest-close" aria-label="Close quest panel" onClick={() => setQuestOpen(false)}>×</button>
+            </div>
+            <div className="quest-event-label"><span>{eventState.title}</span><strong>{eventProgress}%</strong></div>
+            <div className="quest-progress"><i style={{ width: `${eventProgress}%` }} /></div>
+            <div className="quest-list">
+              {eventState.tasks.map((task) => {
+                const percent = Math.min(100, Math.round((task.progress / task.goal) * 100));
+                const complete = task.progress >= task.goal;
+                return (
+                  <div key={task.id} className={`quest-item ${complete ? 'complete' : ''}`}>
+                    <span className="quest-icon">{complete ? '✓' : '◆'}</span>
+                    <div className="quest-copy">
+                      <strong>{task.title}</strong>
+                      <div className="quest-item-meta"><span>{task.progress}/{task.goal}</span><small>{task.reward}</small></div>
+                      <div className="quest-item-progress"><i style={{ width: `${percent}%` }} /></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <button className="quest-view-button" onClick={() => { setQuestOpen(false); setEventOpen(true); }}>VIEW EVENT <span>↗</span></button>
+          </aside>
         </div>
-        <div className="quest-event-label"><span>{eventState.title}</span><strong>{eventProgress}%</strong></div>
-        <div className="quest-progress"><i style={{ width: `${eventProgress}%` }} /></div>
-        <div className="quest-list">
-          {eventState.tasks.map((task) => {
-            const percent = Math.min(100, Math.round((task.progress / task.goal) * 100));
-            const complete = task.progress >= task.goal;
-            return (
-              <div key={task.id} className={`quest-item ${complete ? 'complete' : ''}`}>
-                <span className="quest-icon">{complete ? '✓' : '◆'}</span>
-                <div className="quest-copy">
-                  <strong>{task.title}</strong>
-                  <div className="quest-item-meta"><span>{task.progress}/{task.goal}</span><small>{task.reward}</small></div>
-                  <div className="quest-item-progress"><i style={{ width: `${percent}%` }} /></div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <button className="quest-view-button" onClick={() => setEventOpen(true)}>VIEW EVENT <span>↗</span></button>
-      </aside>
+      )}
 
       {socialPanel && <div className="social-panel"><div className="social-panel-heading"><div><span className="eyebrow">PLAYER CONNECTIONS</span><h2>{socialPanel === 'friends' ? 'ADD FRIEND' : 'MAIL'}</h2></div><button onClick={() => setSocialPanel(null)} aria-label="Close panel">×</button></div>{socialPanel === 'friends' ? <><p className="panel-copy">Find players by username or Player ID.</p><div className="social-search"><input placeholder="Username or #Player ID" /><button type="button">SEARCH</button></div><div className="empty-social"><span>＋</span><strong>NO REQUESTS YET</strong><small>Friend requests will appear here.</small></div></> : <div className="empty-social"><span>✉</span><strong>YOUR INBOX IS EMPTY</strong><small>System mail and invites will appear here.</small></div>}</div>}
 

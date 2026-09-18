@@ -1132,9 +1132,14 @@ html, body, #root, body {
 .bottom-nav button.active { color: var(--party-yellow) !important; background: rgba(255, 227, 91, .16) !important; box-shadow: none !important; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--party-blue); outline-offset: 3px; }
 
-.quest-panel { position: absolute; z-index: 3; top: 145px; right: clamp(16px, 3vw, 40px); width: 252px; padding: 18px; border: 2px solid var(--party-line); border-radius: 22px; background: linear-gradient(145deg, rgba(70, 20, 112, .9), rgba(111, 22, 123, .78)); box-shadow: var(--party-shadow); backdrop-filter: blur(12px); }
+.quest-toggle-button { border-color: var(--party-blue) !important; background: rgba(99, 233, 239, .08) !important; }
+.quest-toggle-button span { color: var(--party-yellow) !important; }
+.quest-panel-backdrop { position: fixed; inset: 0; z-index: 30; background: rgba(17, 9, 27, .28); backdrop-filter: blur(2px); }
+.quest-panel { position: absolute; z-index: 31; top: 145px; right: clamp(16px, 3vw, 40px); width: 252px; padding: 18px; border: 2px solid var(--party-line); border-radius: 22px; background: linear-gradient(145deg, rgba(70, 20, 112, .9), rgba(111, 22, 123, .78)); box-shadow: var(--party-shadow); backdrop-filter: blur(12px); }
 .quest-heading, .quest-event-label, .quest-item-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.quest-heading { align-items: flex-start; }
 .quest-heading h2 { margin: 5px 0 0; color: var(--party-ink); font-size: 20px; letter-spacing: .1em; }
+.quest-close { border: 0; background: transparent; color: var(--party-muted); font-size: 20px; line-height: 1; cursor: pointer; }
 .quest-mark { display: grid; width: 34px; height: 34px; place-items: center; border: 2px solid rgba(255, 227, 91, .55); border-radius: 12px; color: var(--party-yellow); background: rgba(255, 227, 91, .14); }
 .quest-event-label { margin-top: 18px; color: var(--party-muted); font-size: 9px; font-weight: 800; letter-spacing: .08em; }
 .quest-event-label strong { color: var(--party-yellow); font-size: 16px; }
