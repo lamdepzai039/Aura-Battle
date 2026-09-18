@@ -36,14 +36,14 @@ export function Home({
   const [messages, setMessages] = useState<ChatMessage[]>(() => getMessages('GLOBAL'));
   const [chatNotice, setChatNotice] = useState('');
   const [claimNotice, setClaimNotice] = useState('');
-  const [eventState, setEventState] = useState(() => getActiveEvent());
+  const [eventState, setEventState] = useState(() => getActiveEvent(username));
   const [clickAura, setClickAura] = useState(0);
   const [dailyState, setDailyState] = useState(() => getDailyLoginState());
   const [now, setNow] = useState(() => Date.now());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastSentAt = useRef(0);
 
-  const eventProgress = getEventProgress();
+  const eventProgress = getEventProgress(username);
   const currentDay = getLoginDayIndex();
   const currentDayReward = DAILY_LOGIN_REWARDS.find((reward) => reward.day === currentDay);
   const loginClaimable = !dailyState.claimedDays.includes(currentDay) && currentDay > dailyState.lastClaimedDay;
@@ -78,7 +78,7 @@ export function Home({
   }
 
   function handleClaimEvent() {
-    const nextState = claimEventReward();
+    const nextState = claimEventReward(username);
     setEventState(nextState);
     setClaimNotice(nextState.claimed ? 'Event reward claimed!' : 'Complete every event task to claim.');
   }

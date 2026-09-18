@@ -18,47 +18,113 @@ export type EventState = {
 };
 
 const EVENT_KEY = 'aura-battle-active-event-v2';
+const QUEST_COUNT = 30;
+const QUEST_PICK_COUNT = 5;
 
-export const ACTIVE_EVENT: EventState = {
-  id: 'weekly-aura-event',
-  title: 'WEEKLY AURA EVENT',
-  description: 'Complete matches, survive the pressure, and stack event points to unlock the weekly reward drop.',
-  startDate: '2026-09-17T00:00:00.000Z',
-  endDate: '2026-09-24T23:59:59.000Z',
-  tasks: [
-    { id: 'rounds', title: 'Complete 3 rounds', goal: 3, progress: 0, reward: '150 Coins' },
-    { id: 'streak', title: 'Win 2 matches', goal: 2, progress: 0, reward: '250 XP' },
-    { id: 'challenge', title: 'Trigger 2 aura breaks', goal: 2, progress: 0, reward: 'AURA Token' },
-  ],
-  claimed: false,
-  totalRewards: ['150 Coins', '250 XP', 'AURA Token', 'Sticker Pack'],
-};
+export const RANDOM_QUEST_POOL: EventTask[] = [
+  { id: 'q-01', title: 'Win 1 match', goal: 1, progress: 0, reward: '100 Coins' },
+  { id: 'q-02', title: 'Complete 3 rounds', goal: 3, progress: 0, reward: '120 Coins' },
+  { id: 'q-03', title: 'Use Aura Break twice', goal: 2, progress: 0, reward: '150 XP' },
+  { id: 'q-04', title: 'Score 250 aura in total', goal: 250, progress: 0, reward: '200 Coins' },
+  { id: 'q-05', title: 'Play 2 local battles', goal: 2, progress: 0, reward: '80 XP' },
+  { id: 'q-06', title: 'Finish 1 challenge streak', goal: 1, progress: 0, reward: 'AURA Token' },
+  { id: 'q-07', title: 'Trigger 3 freeze effects', goal: 3, progress: 0, reward: '90 Coins' },
+  { id: 'q-08', title: 'Clear 2 mirror rounds', goal: 2, progress: 0, reward: '110 XP' },
+  { id: 'q-09', title: 'Reach 500 total aura', goal: 500, progress: 0, reward: '150 Coins' },
+  { id: 'q-10', title: 'Win 2 ranked battles', goal: 2, progress: 0, reward: '300 XP' },
+  { id: 'q-11', title: 'Complete 5 rounds in one session', goal: 5, progress: 0, reward: '180 Coins' },
+  { id: 'q-12', title: 'Use 4 aura mutations', goal: 4, progress: 0, reward: '220 XP' },
+  { id: 'q-13', title: 'Trigger 2 stare-down wins', goal: 2, progress: 0, reward: '140 Coins' },
+  { id: 'q-14', title: 'Earn 3 aura break combos', goal: 3, progress: 0, reward: '170 XP' },
+  { id: 'q-15', title: 'Hit 1000 total score', goal: 1000, progress: 0, reward: '250 Coins' },
+  { id: 'q-16', title: 'Finish 4 challenge rounds', goal: 4, progress: 0, reward: '160 XP' },
+  { id: 'q-17', title: 'Play 3 practice matches', goal: 3, progress: 0, reward: '90 Coins' },
+  { id: 'q-18', title: 'Score 600 aura in one match', goal: 600, progress: 0, reward: '200 XP' },
+  { id: 'q-19', title: 'Perform 2 mewing actions', goal: 2, progress: 0, reward: '110 Coins' },
+  { id: 'q-20', title: 'Clear 1 hand-gesture challenge', goal: 1, progress: 0, reward: '130 XP' },
+  { id: 'q-21', title: 'Win 3 consecutive battles', goal: 3, progress: 0, reward: '280 Coins' },
+  { id: 'q-22', title: 'Collect 2 sticker packs', goal: 2, progress: 0, reward: 'AURA Token' },
+  { id: 'q-23', title: 'Reach 750 aura total', goal: 750, progress: 0, reward: '210 XP' },
+  { id: 'q-24', title: 'Finish 6 rounds total', goal: 6, progress: 0, reward: '170 Coins' },
+  { id: 'q-25', title: 'Land 3 perfect counters', goal: 3, progress: 0, reward: '190 XP' },
+  { id: 'q-26', title: 'Use 5 different moves', goal: 5, progress: 0, reward: '260 Coins' },
+  { id: 'q-27', title: 'Trigger 1 custom aura round', goal: 1, progress: 0, reward: 'AURA Token' },
+  { id: 'q-28', title: 'Complete 2 special events', goal: 2, progress: 0, reward: '140 XP' },
+  { id: 'q-29', title: 'Earn 800 total aura', goal: 800, progress: 0, reward: '240 Coins' },
+  { id: 'q-30', title: 'Win 4 matches', goal: 4, progress: 0, reward: '320 XP' },
+];
 
-function readEventState(): EventState {
+function getQuestSeed(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash;
+}
+
+function shuffle<T>(items: T[], seed: number): T[] {
+  const clone = [...items];
+  let nextSeed = seed;
+  for (let index = clone.length - 1; index > 0; index -= 1) {
+    nextSeed = (nextSeed * 1664525 + 1013904223) >>> 0;
+    const swapIndex = nextSeed % (index + 1);
+    [clone[index], clone[swapIndex]] = [clone[swapIndex], clone[index]];
+  }
+  return clone;
+}
+
+function getRandomQuestSetForPlayer(playerId: string): EventTask[] {
+  if (RANDOM_QUEST_POOL.length !== QUEST_COUNT) {
+    throw new Error(`Quest pool must contain ${QUEST_COUNT} items.`);
+  }
+
+  const seededPool = shuffle(RANDOM_QUEST_POOL, getQuestSeed(playerId || 'guest'));
+  return seededPool.slice(0, QUEST_PICK_COUNT).map((quest, index) => ({
+    ...quest,
+    id: `${quest.id}-${playerId || 'guest'}-${index}`,
+    progress: 0,
+  }));
+}
+
+function createDefaultEvent(playerId: string): EventState {
+  return {
+    id: `weekly-aura-event-${playerId || 'guest'}`,
+    title: 'WEEKLY AURA EVENT',
+    description: 'Complete your daily challenge board, survive the pressure, and stack event points to unlock the weekly reward drop.',
+    startDate: '2026-09-17T00:00:00.000Z',
+    endDate: '2026-09-24T23:59:59.000Z',
+    tasks: getRandomQuestSetForPlayer(playerId),
+    claimed: false,
+    totalRewards: ['150 Coins', '250 XP', 'AURA Token', 'Sticker Pack'],
+  };
+}
+
+function readEventState(playerId = 'guest'): EventState {
   try {
-    const raw = localStorage.getItem(EVENT_KEY);
-    if (!raw) return ACTIVE_EVENT;
+    const raw = localStorage.getItem(`${EVENT_KEY}-${playerId}`);
+    if (!raw) return createDefaultEvent(playerId);
     const parsed = JSON.parse(raw) as Partial<EventState>;
-    return { ...ACTIVE_EVENT, ...parsed, tasks: parsed.tasks?.length ? parsed.tasks : ACTIVE_EVENT.tasks };
+    const fallback = createDefaultEvent(playerId);
+    return { ...fallback, ...parsed, tasks: parsed.tasks?.length ? parsed.tasks : fallback.tasks };
   } catch {
-    return ACTIVE_EVENT;
+    return createDefaultEvent(playerId);
   }
 }
 
 function writeEventState(state: EventState) {
   try {
-    localStorage.setItem(EVENT_KEY, JSON.stringify(state));
+    localStorage.setItem(`${EVENT_KEY}-${state.id.replace('weekly-aura-event-', '')}`, JSON.stringify(state));
   } catch {
     // ignore unsupported storage access in restricted contexts
   }
 }
 
-export function getActiveEvent(): EventState {
-  return readEventState();
+export function getActiveEvent(playerId = 'guest'): EventState {
+  return readEventState(playerId);
 }
 
-export function claimEventReward(): EventState {
-  const current = readEventState();
+export function claimEventReward(playerId = 'guest'): EventState {
+  const current = readEventState(playerId);
   const totalProgress = current.tasks.reduce((sum, task) => sum + Math.min(task.progress, task.goal), 0);
   const totalGoal = current.tasks.reduce((sum, task) => sum + task.goal, 0);
 
@@ -71,9 +137,15 @@ export function claimEventReward(): EventState {
   return next;
 }
 
-export function getEventProgress(): number {
-  const event = getActiveEvent();
+export function getEventProgress(playerId = 'guest'): number {
+  const event = getActiveEvent(playerId);
   const goal = event.tasks.reduce((sum, task) => sum + task.goal, 0);
   const progress = event.tasks.reduce((sum, task) => sum + Math.min(task.progress, task.goal), 0);
   return Math.min(100, Math.round((progress / Math.max(goal, 1)) * 100));
 }
+
+export function getQuestBoardForPlayer(playerId: string): EventTask[] {
+  return getActiveEvent(playerId).tasks;
+}
+
+export const ACTIVE_EVENT = createDefaultEvent('guest');
