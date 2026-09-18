@@ -108,35 +108,97 @@ export function MutationMap({ playerName, rivalName, loadout, onHome }: Mutation
   }
 
   const progress = Math.round((collected.length / MAP_ITEMS.length) * 100);
+  const archetypeClass = loadout.archetype.toLowerCase();
+  const mutationLabel = loadout.mutationId.toUpperCase().replace(/-/g, ' ');
+
   return (
-    <main className="mutation-map-shell">
-      <header className="mutation-map-header">
-        <div><span className="eyebrow">AURA MUTATION · 2D ARENA</span><h1>{loadout.trendPack.title} <span>RUN</span></h1><p>{loadout.trendPack.theme} · {loadout.mutationId.toUpperCase()} · {loadout.archetype.toUpperCase()}</p></div>
+    <main className="mutation-arena-shell">
+      <header className="mutation-arena-header">
+        <div className="mutation-arena-brand">
+          <span className="eyebrow">AURA MUTATION · 2D ARENA</span>
+          <h1>{loadout.trendPack.title} <span>RUN</span></h1>
+          <p>{loadout.trendPack.theme} · {mutationLabel} · {loadout.archetype.toUpperCase()}</p>
+        </div>
         <button className="mutation-exit-button" onClick={onHome}>EXIT MAP</button>
       </header>
-      <section className="mutation-map-hud">
-        <div><small>PLAYER</small><strong>{playerName}</strong></div>
-        <div><small>AURA</small><strong>{aura}</strong></div>
-        <div><small>ITEMS</small><strong>{collected.length}/{MAP_ITEMS.length}</strong></div>
-        <div><small>TIME</small><strong>{secondsLeft}s</strong></div>
+
+      <section className="mutation-top-hud" aria-label="Arena status">
+        <div className="arena-player-card glow-blue">
+          <div className="arena-avatar">A</div>
+          <div className="arena-player-copy">
+            <strong>{playerName}</strong>
+            <span>80%</span>
+          </div>
+          <div className="arena-health"><i style={{ width: '80%' }} /></div>
+        </div>
+        <div className="arena-player-card glow-indigo">
+          <div className="arena-avatar">M</div>
+          <div className="arena-player-copy">
+            <strong>{rivalName}</strong>
+            <span>70%</span>
+          </div>
+          <div className="arena-health"><i style={{ width: '70%' }} /></div>
+        </div>
+        <div className="arena-player-card glow-gold">
+          <div className="arena-avatar">R</div>
+          <div className="arena-player-copy">
+            <strong>ROGUE</strong>
+            <span>40%</span>
+          </div>
+          <div className="arena-health"><i style={{ width: '40%' }} /></div>
+        </div>
+        <div className="arena-player-card glow-green">
+          <div className="arena-avatar">R</div>
+          <div className="arena-player-copy">
+            <strong>RANGER</strong>
+            <span>90%</span>
+          </div>
+          <div className="arena-health"><i style={{ width: '90%' }} /></div>
+        </div>
       </section>
-      <section className="mutation-map-layout">
+
+      <section className="mutation-arena-layout">
         <div className="mutation-board-wrap">
           <div className="mutation-board" aria-label="2D Aura Mutation map">
             <div className="map-grid-lines" aria-hidden="true" />
+            <div className="arena-hills hill-left" aria-hidden="true" />
+            <div className="arena-hills hill-right" aria-hidden="true" />
+            <div className="arena-structure left-ruin" aria-hidden="true" />
+            <div className="arena-structure right-ruin" aria-hidden="true" />
+            <div className="objective-zone"><span>OBJECTIVE</span><strong>ENERGY CORE</strong></div>
             {MAP_ITEMS.map((item) => !collected.includes(item.id) && <div key={item.id} className={`map-item map-item-${item.type}`} style={{ left: `${item.x}%`, top: `${item.y}%` }}><span>{item.type === 'pack' ? '▣' : '✦'}</span><small>{item.type === 'pack' ? 'PACK' : 'AURA'}</small></div>)}
             <div className="map-rival" style={{ left: '82%', top: '67%' }}><span>◆</span><small>{rivalName}</small></div>
             <div className="map-player" style={{ left: `${position.x}%`, top: `${position.y}%` }}><span>✦</span><small>{playerName}</small></div>
             {finished && <div className="mutation-finished-overlay"><span className="eyebrow">RUN COMPLETE</span><h2>{aura} AURA</h2><p>{collected.length === MAP_ITEMS.length ? 'Every item collected.' : 'Time is up. Your snapshot is ready.'}</p><button onClick={onHome}>RETURN HOME</button></div>}
           </div>
+
+          <div className="arena-capsule-bar" aria-label="Combat action bar">
+            <button className={archetypeClass === 'mobility' ? 'active' : ''}>MOBILITY</button>
+            <button className={archetypeClass === 'stability' ? 'active' : ''}>STABILITY</button>
+            <button className={archetypeClass === 'volatility' ? 'active' : ''}>VOLATILITY</button>
+            <button className="hud-value">{aura} AURA</button>
+            <button className="hud-value">{secondsLeft}s</button>
+          </div>
+
           <div className="mutation-touch-controls" aria-label="Touch movement controls">
             <button onPointerDown={() => setControl('arrowup', true)} onPointerUp={() => setControl('arrowup', false)} onPointerLeave={() => setControl('arrowup', false)}>▲</button>
             <div><button onPointerDown={() => setControl('arrowleft', true)} onPointerUp={() => setControl('arrowleft', false)} onPointerLeave={() => setControl('arrowleft', false)}>◀</button><button onPointerDown={() => setControl('arrowdown', true)} onPointerUp={() => setControl('arrowdown', false)} onPointerLeave={() => setControl('arrowdown', false)}>▼</button><button onPointerDown={() => setControl('arrowright', true)} onPointerUp={() => setControl('arrowright', false)} onPointerLeave={() => setControl('arrowright', false)}>▶</button></div>
           </div>
         </div>
+
         <aside className="mutation-side-panel">
-          <div className="mutation-objective"><span className="eyebrow">CURRENT OBJECTIVE</span><h2>COLLECT THE FIELD</h2><div className="mutation-objective-bar"><i style={{ width: `${progress}%` }} /></div><strong>{progress}% COMPLETE</strong></div>
-          <div className="mutation-rule-card"><span className="eyebrow">TREND RULES</span>{loadout.trendPack.rules.map((rule) => <p key={rule}>• {rule}</p>)}</div>
+          <div className="mutation-objective">
+            <span className="eyebrow">CURRENT OBJECTIVE</span>
+            <h2>COLLECT THE FIELD</h2>
+            <div className="mutation-objective-bar"><i style={{ width: `${progress}%` }} /></div>
+            <strong>{progress}% COMPLETE</strong>
+          </div>
+
+          <div className="mutation-rule-card">
+            <span className="eyebrow">TREND RULES</span>
+            {loadout.trendPack.rules.map((rule) => <p key={rule}>• {rule}</p>)}
+          </div>
+
           <div className="mutation-notice" role="status">{notice}</div>
           <p className="mutation-controls-hint">MOVE WITH WASD OR ARROW KEYS. TOUCH CONTROLS ARE AVAILABLE ON MOBILE.</p>
         </aside>
