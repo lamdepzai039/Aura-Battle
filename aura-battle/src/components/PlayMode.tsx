@@ -3,7 +3,7 @@ import type { GameMode } from '../game/types';
 import { LOCAL_ROOM_KEY, clearLocalRoom, clearStaleLocalRoom, createLocalRoom, getLocalRoom, joinLocalRoom, updateLocalRoom } from '../utils/roomStore';
 import { createFallbackRoomState, resolveLobbyUrl, sanitizeRoomCode, type OnlineRoomState } from '../utils/onlineRoom';
 
-type QueueMode = '1V1' | 'AURA MUTATION' | '2V2' | '3V3' | 'RANKED' | 'ROOM';
+type QueueMode = '1V1' | 'AURA MUTATION' | 'AURA SANDBOX' | '2V2' | '3V3' | 'RANKED' | 'ROOM';
 
 type OnlineBattleContext = {
   roomCode: string;
@@ -206,6 +206,7 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
   const modes: Array<{ id: QueueMode; title: string; description: string; available: boolean; gameMode?: GameMode }> = [
     { id: '1V1', title: '1V1 DUEL', description: 'One camera. Two players. Pure aura.', available: true, gameMode: 'local' },
     { id: 'AURA MUTATION', title: 'AURA MUTATION', description: 'Your playstyle changes your current, then the arena responds in real time.', available: true, gameMode: 'mutation' },
+    { id: 'AURA SANDBOX', title: 'AURA SANDBOX', description: 'Explore a 2D world, mine blocks, collect resources, fight, and mutate your abilities in local play.', available: true, gameMode: 'mutation' },
     { id: '2V2', title: '2V2 SQUAD', description: 'Local squad queue fallback with a ready-to-play team duel.', available: true, gameMode: 'duo' },
     { id: '3V3', title: '3V3 CREW', description: 'Local crew queue fallback for quick 3v3-style testing.', available: true, gameMode: 'crew' },
     { id: 'RANKED', title: 'RANKED', description: 'Competitive bracket flow enabled with local fallback for now.', available: true, gameMode: 'ranked' },
@@ -400,7 +401,7 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
         <div className="mode-rail">
           {modes.map((item) => (
             <button key={item.id} className={mode === item.id ? 'active' : ''} onClick={() => selectMode(item)}>
-              <span>{item.id === 'RANKED' ? '♜' : item.id === 'ROOM' ? '⌘' : item.id === 'AURA MUTATION' ? '✦' : '⚔'}</span>
+              <span>{item.id === 'RANKED' ? '♜' : item.id === 'ROOM' ? '⌘' : item.id === 'AURA SANDBOX' ? '▣' : item.id === 'AURA MUTATION' ? '✦' : '⚔'}</span>
               <strong>{item.title}</strong>
               <small>{item.available ? 'READY' : 'BACKEND REQUIRED'}</small>
             </button>
@@ -466,6 +467,14 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
               <strong>AURA MUTATION READY</strong>
               <span>Mutations are selected from your archetype and the trend pack rotates per round.</span>
               <button onClick={() => onSelect('mutation')}>ENTER MUTATION <span>↗</span></button>
+            </div>
+          )}
+
+          {mode === 'AURA SANDBOX' && (
+            <div className="mode-ready">
+              <strong>AURA SANDBOX READY</strong>
+              <span>Seed-based terrain, mining, loot, hostile creatures, and movement-driven mutation abilities are enabled in the local prototype.</span>
+              <button onClick={() => onSelect('mutation')}>ENTER SANDBOX <span>↗</span></button>
             </div>
           )}
 
