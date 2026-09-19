@@ -67,9 +67,14 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
       roomState.guestReady = saved.guestReady ?? false;
       roomState.startedAt = saved.startedAt ?? null;
       roomState.matchSeed = saved.matchSeed ?? null;
+      // The lobby state is synchronized from browser storage, so this update is intentionally tied to the external room snapshot.
+      // oxlint-disable-next-line react/set-state-in-effect
       setOnlineRoom(roomState);
+      // oxlint-disable-next-line react/set-state-in-effect
       setRoomCode(saved.code);
+      // oxlint-disable-next-line react/set-state-in-effect
       setIsHost(saved.host === playerName);
+      // oxlint-disable-next-line react/set-state-in-effect
       setSelfReady(saved.hostReady ?? false);
     };
 
@@ -83,7 +88,10 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
 
     const nextSocket = new WebSocket(resolveLobbyUrl(window.location.href));
     socketRef.current = nextSocket;
+    // This effect is intentionally tied to browser socket lifecycle updates from the external lobby connection.
+    // oxlint-disable-next-line react/set-state-in-effect
     setSocketStatus('connecting');
+    // oxlint-disable-next-line react/set-state-in-effect
     setNotice('Connecting to the online lobby...');
 
     nextSocket.onopen = () => {
@@ -157,7 +165,7 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
       nextSocket.close();
       socketRef.current = null;
     };
-  }, [mode, playerName]);
+  }, [mode, onSelect, playerName]);
 
   useEffect(() => {
     if (mode !== 'ROOM') return;
@@ -185,9 +193,13 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
     fallbackRoom.guestReady = localRoom.guestReady ?? false;
     fallbackRoom.startedAt = localRoom.startedAt ?? null;
     fallbackRoom.matchSeed = localRoom.matchSeed ?? null;
+    // oxlint-disable-next-line react/set-state-in-effect
     setOnlineRoom(fallbackRoom);
+    // oxlint-disable-next-line react/set-state-in-effect
     setIsHost(localRoom.host === playerName);
+    // oxlint-disable-next-line react/set-state-in-effect
     setSelfReady(localRoom.hostReady ?? false);
+    // oxlint-disable-next-line react/set-state-in-effect
     setNotice(localRoom.guest ? `${localRoom.host} vs ${localRoom.guest}` : `Room ${localRoom.code} is waiting for a challenger.`);
   }, [mode, onlineRoom, playerName, roomCode]);
 

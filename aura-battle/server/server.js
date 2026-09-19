@@ -318,6 +318,7 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({ type: 'pong' }));
       }
     } catch (error) {
+      console.error('Invalid lobby message:', error);
       ws.send(JSON.stringify({ type: 'error', message: 'Invalid message.' }));
     }
   });

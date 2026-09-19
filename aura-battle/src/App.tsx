@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { Home } from './components/Home';
 import { Login } from './components/Login';
 import { Settings } from './components/Settings';
 import { Shop } from './components/Shop';
 import { Guild } from './components/Guild';
-import { PlayMode } from './components/PlayMode';
 import { PlayerSetup } from './components/PlayerSetup';
 import { MutationMap } from './components/MutationMap';
 import { Leaderboard } from './components/Leaderboard';
@@ -16,6 +15,10 @@ import { RoundResult } from './components/RoundResult';
 import { FinalResult } from './components/FinalResult';
 import { AuraBreak } from './components/AuraBreak';
 import { DebugPanel } from './components/DebugPanel';
+const PlayMode = lazy(async () => {
+  const module = await import('./components/PlayMode');
+  return { default: module.PlayMode };
+});
 import { useAuraMatch } from './game/useAuraMatch';
 import { currentChallenge } from './game/gameState';
 import { recordResult } from './utils/leaderboard';
@@ -43,7 +46,7 @@ export default function App() {
   const [username, setUsername] = useState(() => getSession() || 'LAM');
   const [sessionEmail, setSessionEmail] = useState(() => getSessionEmail());
   const [pendingMode, setPendingMode] = useState<GameMode>('local');
-  const [mutationSession, setMutationSession] = useState<{ playerName: string; rivalName: string; loadout: MutationLoadout } | null>(null);
+  const [mutationSession, setMutationSession] = useState<{ playerName: string; rivalName: string; loadout: MutationLoadout; skinId: 'skin-1' | 'skin-2' | 'skin-3' } | null>(null);
   const [onlineLobby, setOnlineLobby] = useState<OnlineLobbySession | null>(null);
   const onlineSocketRef = useRef<WebSocket | null>(null);
   const recordedRef = useRef(false);
@@ -95,7 +98,7 @@ export default function App() {
       }
     }
     if (match.screen === 'round_intro' && match.roundIndex === 0 && match.history.length === 0) recordedRef.current = false;
-  }, [match.screen, match.roundIndex, match.history.length, match.mode, match.players]);
+  }, [match.screen, match.roundIndex, match.history, match.mode, match.players, winner]);
 
   useEffect(() => {
     if (!onlineLobby?.roomCode) {
@@ -171,7 +174,7 @@ export default function App() {
   if (phase === 'guild') return <Guild username={username} onHome={() => setPhase('home')} onShop={() => setPhase('shop')} onSettings={() => setPhase('settings')} />;
   if (phase === 'settings') return <Settings onBack={() => setPhase('home')} onLogout={() => setPhase('login')} onShop={() => setPhase('shop')} onGuild={() => setPhase('guild')} />;
   if (phase === 'leaderboard') return <Leaderboard onBack={() => setPhase('home')} />;
-  if (phase === 'mode_select') return <PlayMode username={username} onSelect={(mode, onlineContext) => {
+  if (phase === 'mode_select') return <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center bg-[#050816] text-xs font-display tracking-[0.3em] text-cyan-300">LOADING MODE…</div>}><PlayMode username={username} onSelect={(mode, onlineContext) => {
     if (mode === 'online') {
       setPendingMode('online');
       setOnlineLobby(onlineContext ?? null);
@@ -180,13 +183,13 @@ export default function App() {
     }
     setPendingMode(mode);
     setPhase(mode === 'mutation' ? 'player_setup' : 'camera_check');
-  }} onBack={() => setPhase('home')} />;
+  }} onBack={() => setPhase('home')} /></Suspense>;
 
   if (phase === 'camera_check') return <div className="fixed inset-0 flex flex-col items-center justify-center px-6 gap-6"><p className="font-display text-xs tracking-[0.3em] text-white/50">CAMERA CHECK</p><div className="w-full max-w-2xl"><CameraView ref={videoRef} status={cameraStatus} onEnable={enableCamera} onVideoReady={attachStreamToVideo} /></div>{cameraStatus === 'granted' && <button onClick={() => setPhase('player_setup')} className="px-8 py-3 rounded-full font-display text-sm tracking-wide bg-cyan-400 text-black hover:bg-cyan-300 transition">CONTINUE</button>}<button onClick={() => setPhase('home')} className="text-xs text-white/40 hover:text-white/70 font-display tracking-widest">← BACK</button></div>;
 
-  if (phase === 'player_setup') return <PlayerSetup mode={pendingMode} onBack={() => setPhase('mode_select')} onStart={(p1, p2, prompt, mutation: MutationLoadout | undefined) => {
+  if (phase === 'player_setup') return <PlayerSetup mode={pendingMode} onBack={() => setPhase('mode_select')} onStart={(p1, p2, prompt, mutation: MutationLoadout | undefined, skinId: 'skin-1' | 'skin-2' | 'skin-3' = 'skin-1') => {
     if (pendingMode === 'mutation' && mutation) {
-      setMutationSession({ playerName: p1, rivalName: p2, loadout: mutation });
+      setMutationSession({ playerName: p1, rivalName: p2, loadout: mutation, skinId });
       setPhase('mutation_map');
       return;
     }
@@ -196,7 +199,7 @@ export default function App() {
     setPhase('battle');
   }} />;
 
-  if (phase === 'mutation_map' && mutationSession) return <MutationMap playerName={mutationSession.playerName} rivalName={mutationSession.rivalName} loadout={mutationSession.loadout} onHome={() => { setMutationSession(null); setPhase('home'); }} />;
+  if (phase === 'mutation_map' && mutationSession) return <MutationMap playerName={mutationSession.playerName} rivalName={mutationSession.rivalName} loadout={mutationSession.loadout} skinId={mutationSession.skinId} onHome={() => { setMutationSession(null); setPhase('home'); }} />;
 
   if (phase === 'online_waiting') return <div className="fixed inset-0 flex flex-col items-center justify-center px-6 gap-6 bg-[#050816]">
     <div className="text-center space-y-4">

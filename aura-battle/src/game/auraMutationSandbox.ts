@@ -1,0 +1,432 @@
+export type TileType = 'air' | 'grass' | 'dirt' | 'stone' | 'ore' | 'crystal' | 'wood' | 'water' | 'aura_block';
+export type ToolType = 'pickaxe' | 'axe' | 'sword' | 'hands';
+export type BiomeType = 'aura_forest' | 'aura_caverns' | 'corrupted_aura_zone';
+
+export interface TileDefinition {
+  id: string;
+  type: TileType;
+  x: number;
+  y: number;
+  solid: boolean;
+  hardness: number;
+  health: number;
+  maxHealth: number;
+  background: string;
+  drops: Record<string, number>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ChunkDefinition {
+  key: string;
+  x: number;
+  y: number;
+  size: number;
+  tiles: TileDefinition[];
+}
+
+export interface WorldDefinition {
+  seed: number;
+  width: number;
+  height: number;
+  chunkSize: number;
+  tiles: TileDefinition[];
+  chunks: ChunkDefinition[];
+  biomes: Record<string, { label: string; color: string }>;
+}
+
+export interface InventoryState {
+  wood: number;
+  stone: number;
+  ore: number;
+  crystal: number;
+  auraShard: number;
+}
+
+export interface MutationSpec {
+  id: string;
+  name: string;
+  archetype: 'mobility' | 'stability' | 'volatility';
+  cost: number;
+  cooldown: number;
+  effect: string;
+  enabled: boolean;
+}
+
+export interface PlayerState {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  velocityX: number;
+  velocityY: number;
+  health: number;
+  maxHealth: number;
+  energy: number;
+  maxEnergy: number;
+  auraLevel: number;
+  mutationCooldown: number;
+  activeMutationId: string | null;
+}
+
+export interface SandboxState {
+  world: WorldDefinition;
+  player: PlayerState;
+  inventory: InventoryState;
+  selectedSlot: number;
+  biome: BiomeType;
+  activeEvent: string;
+  eventLog: string[];
+}
+
+export const MUTATION_LIBRARY: Record<string, MutationSpec> = {
+  'momentum-dash': {
+    id: 'momentum-dash',
+    name: 'Momentum Dash',
+    archetype: 'mobility',
+    cost: 18,
+    cooldown: 3.5,
+    effect: 'Short burst reposition for fast lane control.',
+    enabled: true,
+  },
+  'phase-step': {
+    id: 'phase-step',
+    name: 'Phase Step',
+    archetype: 'mobility',
+    cost: 16,
+    cooldown: 4,
+    effect: 'Creates a rapid dodge window to break pressure.',
+    enabled: true,
+  },
+  'reactive-barrier': {
+    id: 'reactive-barrier',
+    name: 'Reactive Barrier',
+    archetype: 'stability',
+    cost: 20,
+    cooldown: 4.5,
+    effect: 'Converts incoming pressure into a short shield wall.',
+    enabled: true,
+  },
+  'anchor-field': {
+    id: 'anchor-field',
+    name: 'Anchor Field',
+    archetype: 'stability',
+    cost: 22,
+    cooldown: 5,
+    effect: 'Stabilizes a defensive radius around the player.',
+    enabled: true,
+  },
+  'overcharge': {
+    id: 'overcharge',
+    name: 'Overcharge',
+    archetype: 'volatility',
+    cost: 24,
+    cooldown: 6,
+    effect: 'Boosts immediate output at the cost of aura stability.',
+    enabled: true,
+  },
+};
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+function hashTile(seed: number, x: number, y: number) {
+  const value = Math.sin((x + 1) * 127.1 + (y + 1) * 311.7 + seed * 74.7) * 43758.5453123;
+  return value - Math.floor(value);
+}
+
+export function createWorld(options: { seed: number; width?: number; height?: number; chunkSize?: number }): WorldDefinition {
+  const width = options.width ?? 160;
+  const height = options.height ?? 64;
+  const chunkSize = options.chunkSize ?? 16;
+  const tiles: TileDefinition[] = [];
+  const biomes = {
+    aura_forest: { label: 'AURA FOREST', color: '#92d5ff' },
+    aura_caverns: { label: 'AURA CAVERNS', color: '#7d89d8' },
+    corrupted_aura_zone: { label: 'CORRUPTED AURA ZONE', color: '#ff7f7f' },
+  };
+
+  const baseSurface = Math.floor(height * 0.56);
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      let type: TileType = 'air';
+      let solid = false;
+      let hardness = 0;
+      let health = 0;
+      let maxHealth = 0;
+      let background = '#0b1324';
+      let drops: Record<string, number> = {};
+
+      const contour = Math.sin((x + options.seed) * 0.38) * 7 + Math.cos((x + options.seed * 1.7) * 0.17) * 4;
+      const surfaceY = clamp(Math.round(baseSurface + contour), 10, height - 8);
+
+      if (y < surfaceY - 8) {
+        type = 'stone';
+        solid = true;
+        hardness = 2.6;
+        health = 28;
+        maxHealth = 28;
+        background = '#3b4c68';
+        drops = { stone: 1, ore: hashTile(options.seed, x, y) > 0.82 ? 1 : 0 };
+      } else if (y < surfaceY - 2) {
+        type = 'dirt';
+        solid = true;
+        hardness = 1.8;
+        health = 12;
+        maxHealth = 12;
+        background = '#4a5a41';
+        drops = { stone: 1 };
+      } else if (y < surfaceY + 2) {
+        type = 'grass';
+        solid = true;
+        hardness = 1.1;
+        health = 10;
+        maxHealth = 10;
+        background = '#5aa15f';
+        drops = { wood: hashTile(options.seed, x, y) > 0.72 ? 1 : 0 };
+      } else if (y > height - 8) {
+        type = 'water';
+        solid = false;
+        hardness = 0;
+        health = 0;
+        maxHealth = 0;
+        background = '#1b4d76';
+      }
+
+      if (hashTile(options.seed, x, y) > 0.94 && y < surfaceY - 6 && y > 10) {
+        type = 'ore';
+        solid = true;
+        hardness = 3.4;
+        health = 34;
+        maxHealth = 34;
+        background = '#b8a4ff';
+        drops = { ore: 1, crystal: hashTile(options.seed, x + 7, y) > 0.9 ? 1 : 0 };
+      }
+
+      if (hashTile(options.seed, x + 11, y) > 0.985 && y < surfaceY - 2 && y > 8) {
+        type = 'crystal';
+        solid = true;
+        hardness = 4;
+        health = 40;
+        maxHealth = 40;
+        background = '#7ae7ff';
+        drops = { crystal: 1, auraShard: 1 };
+      }
+
+      const treeChance = hashTile(options.seed + 11, x, y);
+      if (treeChance > 0.995 && y < surfaceY - 1 && y > surfaceY - 6) {
+        type = 'wood';
+        solid = true;
+        hardness = 1.5;
+        health = 18;
+        maxHealth = 18;
+        background = '#8c5c33';
+        drops = { wood: 2 };
+      }
+
+      if (y > surfaceY + 8 && hashTile(options.seed + 77, x, y) > 0.9) {
+        type = 'aura_block';
+        solid = true;
+        hardness = 2.9;
+        health = 24;
+        maxHealth = 24;
+        background = '#7a6af0';
+        drops = { auraShard: 1 };
+      }
+
+      const tile: TileDefinition = {
+        id: `tile-${x}-${y}`,
+        type,
+        x,
+        y,
+        solid,
+        hardness,
+        health,
+        maxHealth,
+        background,
+        drops,
+      };
+
+      tiles.push(tile);
+    }
+  }
+
+  const chunks: ChunkDefinition[] = [];
+  for (let chunkY = 0; chunkY < Math.ceil(height / chunkSize); chunkY += 1) {
+    for (let chunkX = 0; chunkX < Math.ceil(width / chunkSize); chunkX += 1) {
+      const startX = chunkX * chunkSize;
+      const startY = chunkY * chunkSize;
+      const localTiles = tiles.filter((tile) => tile.x >= startX && tile.x < startX + chunkSize && tile.y >= startY && tile.y < startY + chunkSize);
+      chunks.push({
+        key: `${chunkX}:${chunkY}`,
+        x: chunkX,
+        y: chunkY,
+        size: chunkSize,
+        tiles: localTiles,
+      });
+    }
+  }
+
+  return { seed: options.seed, width, height, chunkSize, tiles, chunks, biomes };
+}
+
+export function getTileAt(world: WorldDefinition, x: number, y: number): TileDefinition | null {
+  return world.tiles.find((tile) => tile.x === x && tile.y === y) ?? null;
+}
+
+export function getChunkAround(world: WorldDefinition, worldX: number, worldY: number, radius = 1): ChunkDefinition[] {
+  const chunkX = Math.floor(worldX / world.chunkSize);
+  const chunkY = Math.floor(worldY / world.chunkSize);
+  const matches: ChunkDefinition[] = [];
+
+  for (let y = chunkY - radius; y <= chunkY + radius; y += 1) {
+    for (let x = chunkX - radius; x <= chunkX + radius; x += 1) {
+      const chunk = world.chunks.find((candidate) => candidate.x === x && candidate.y === y);
+      if (chunk) matches.push(chunk);
+    }
+  }
+
+  return matches;
+}
+
+export function createSandboxState(options: { seed?: number; playerName?: string; width?: number; height?: number }): SandboxState {
+  const seed = options.seed ?? 928173;
+  const world = createWorld({ seed, width: options.width ?? 160, height: options.height ?? 64, chunkSize: 16 });
+  const baseY = Math.floor(world.height * 0.54) + 2;
+
+  const state: SandboxState = {
+    world,
+    player: {
+      id: 'player-1',
+      name: options.playerName ?? 'Aster',
+      x: 12,
+      y: baseY - 2,
+      width: 1.2,
+      height: 2,
+      velocityX: 0,
+      velocityY: 0,
+      health: 100,
+      maxHealth: 100,
+      energy: 72,
+      maxEnergy: 100,
+      auraLevel: 1,
+      mutationCooldown: 0,
+      activeMutationId: 'momentum-dash',
+    },
+    inventory: {
+      wood: 0,
+      stone: 0,
+      ore: 0,
+      crystal: 0,
+      auraShard: 0,
+    },
+    selectedSlot: 1,
+    biome: 'aura_forest',
+    activeEvent: 'LOCK IN',
+    eventLog: ['World generated with seed 928173.', 'AURA FOREST scanned.'],
+  };
+
+  return state;
+}
+
+export function mineTile(state: SandboxState, action: { x: number; y: number; tool: ToolType }): SandboxState {
+  const tile = getTileAt(state.world, action.x, action.y);
+  if (!tile || tile.type === 'air') {
+    return state;
+  }
+
+  const toolPower = action.tool === 'pickaxe' ? 2.8 : action.tool === 'axe' ? 1.9 : 1.5;
+  const nextTile: TileDefinition = {
+    ...tile,
+    health: Math.max(0, tile.health - toolPower),
+  };
+
+  if (nextTile.health <= 0) {
+    const minedTile: TileDefinition = {
+      ...tile,
+      type: 'air',
+      solid: false,
+      hardness: 0,
+      health: 0,
+      maxHealth: 0,
+      background: '#0b1324',
+      drops: {},
+    };
+
+    const nextWorld = {
+      ...state.world,
+      tiles: state.world.tiles.map((entry) => (entry.id === tile.id ? minedTile : entry)),
+    };
+
+    const nextInventory = { ...state.inventory };
+    Object.entries(tile.drops).forEach(([resource, amount]) => {
+      if (amount > 0) {
+        nextInventory[resource as keyof InventoryState] = (nextInventory[resource as keyof InventoryState] ?? 0) + amount;
+      }
+    });
+
+    return {
+      ...state,
+      world: nextWorld,
+      inventory: nextInventory,
+      eventLog: [...state.eventLog, `Mined ${tile.type} at ${tile.x},${tile.y}.`],
+    };
+  }
+
+  return {
+    ...state,
+    world: {
+      ...state.world,
+      tiles: state.world.tiles.map((entry) => (entry.id === tile.id ? nextTile : entry)),
+    },
+    eventLog: [...state.eventLog, `Breaking ${tile.type} (${nextTile.health}/${nextTile.maxHealth}).`],
+  };
+}
+
+export function useMutation(state: SandboxState, mutationId: string): SandboxState {
+  const mutation = MUTATION_LIBRARY[mutationId];
+  if (!mutation || !mutation.enabled) {
+    return state;
+  }
+
+  if (state.player.energy < mutation.cost) {
+    return {
+      ...state,
+      eventLog: [...state.eventLog, `${mutation.name} was blocked by low Aura Energy.`],
+    };
+  }
+
+  const nextEnergy = state.player.energy - mutation.cost;
+
+  return {
+    ...state,
+    player: {
+      ...state.player,
+      energy: nextEnergy,
+      mutationCooldown: mutation.cooldown,
+      activeMutationId: mutation.id,
+    },
+    eventLog: [...state.eventLog, `${mutation.name} activated. ${mutation.effect}`],
+  };
+}
+
+export function getBiomeFor(world: WorldDefinition, y: number): BiomeType {
+  const depth = y;
+  if (depth > world.height * 0.62) {
+    return 'aura_caverns';
+  }
+  if (depth > world.height * 0.8) {
+    return 'corrupted_aura_zone';
+  }
+  return 'aura_forest';
+}
+
+export function makeCraftingRecipe(result: string, ingredients: Record<string, number>) {
+  return { result, ingredients };
+}
+
+export const RECIPES = {
+  aura_pickaxe: makeCraftingRecipe('aura_pickaxe', { stone: 8, ore: 3, auraShard: 2 }),
+  aura_forge: makeCraftingRecipe('aura_forge', { wood: 12, stone: 8, crystal: 2 }),
+};

@@ -75,6 +75,9 @@ export function Settings({ onBack, onLogout, onShop, onGuild }: { onBack: () => 
     <div className="settings-shell">
       <div className="settings-grid" aria-hidden="true" /><div className="settings-orb" aria-hidden="true" />
       <header className="settings-header"><button className="settings-back" onClick={onBack}>← HOME</button><div><span className="eyebrow">PLAYER CONFIGURATION</span><h1>⚙ {tr.settings} <MemeSticker kind="AURA" size="micro" className="meme-heading-sticker" /></h1><p>{tr.settingsDescription}</p></div><span className="settings-status"><i /> {tr.autoSaved}</span></header>
+      <div style={{ margin: '0.5rem 0 0', padding: '0.7rem 0.9rem', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', background: 'rgba(15, 23, 42, 0.4)', color: '#d7f5ff', fontSize: '11px', lineHeight: 1.5, letterSpacing: '0.04em' }}>
+        For iframe games our Automatic Progress Save does not work, to benefit from cloud save please use the <a href="https://docs.crazygames.com/sdk/data" target="_blank" rel="noreferrer" style={{ color: '#67e8f9', textDecoration: 'underline' }}>data module</a> from the SDK.
+      </div>
       <div className="settings-layout">
         <aside className="settings-sidebar"><label className="settings-mobile-label">{tr.section}<select value={section} onChange={(event) => setSection(event.target.value as Section)}>{sections.map(([name]) => <option key={name} value={name}>{tr.nav[name]}</option>)}</select></label><nav>{sections.map(([name, icon]) => <button key={name} className={section === name ? 'active' : ''} onClick={() => setSection(name)}><span>{icon}</span>{tr.nav[name]}{name === 'CONTROLS' && <i className="unsaved-dot" />}</button>)}</nav></aside>
         <motion.section key={section} className="settings-content" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>

@@ -1,56 +1,53 @@
 import { useEffect, useRef, useState } from 'react';
+import { createMutationArenaState, stepMutationArena } from '../game/auraMutationArena';
+import { createSandboxState, getBiomeFor, mineTile } from '../game/auraMutationSandbox';
 import type { MutationLoadout } from '../game/types';
 
-type MapItem = {
-  id: string;
-  x: number;
-  y: number;
-  type: 'aura' | 'pack';
-  value: number;
-};
+const TILE_SIZE = 20;
+const VIEWPORT_WIDTH = 760;
+const VIEWPORT_HEIGHT = 430;
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 type MutationMapProps = {
   playerName: string;
   rivalName: string;
   loadout: MutationLoadout;
+  skinId?: 'skin-1' | 'skin-2' | 'skin-3';
   onHome: () => void;
 };
 
-const MAP_ITEMS: MapItem[] = [
-  { id: 'aura-1', x: 14, y: 24, type: 'aura', value: 1 },
-  { id: 'aura-2', x: 30, y: 72, type: 'aura', value: 1 },
-  { id: 'aura-3', x: 51, y: 28, type: 'aura', value: 1 },
-  { id: 'aura-4', x: 69, y: 76, type: 'aura', value: 1 },
-  { id: 'aura-5', x: 87, y: 35, type: 'aura', value: 1 },
-  { id: 'pack-1', x: 22, y: 48, type: 'pack', value: 3 },
-  { id: 'pack-2', x: 76, y: 22, type: 'pack', value: 3 },
-  { id: 'pack-3', x: 55, y: 82, type: 'pack', value: 3 },
-];
-
-const ROUND_SECONDS = 60;
-const PLAYER_RADIUS = 5;
-const MOVE_SPEED = 22;
-
-export function MutationMap({ playerName, rivalName, loadout, onHome }: MutationMapProps) {
-  const [position, setPosition] = useState({ x: 10, y: 50 });
-  const [collected, setCollected] = useState<string[]>([]);
-  const [aura, setAura] = useState(0);
-  const [secondsLeft, setSecondsLeft] = useState(ROUND_SECONDS);
-  const [finished, setFinished] = useState(false);
-  const [notice, setNotice] = useState('Explore the map and collect every Aura item.');
-  const positionRef = useRef(position);
+export function MutationMap({ playerName, rivalName, loadout, skinId = 'skin-1', onHome }: MutationMapProps) {
+  const [arena, setArena] = useState(() => createMutationArenaState({
+    playerName,
+    rivalName,
+    loadout: {
+      mutationId: loadout.mutationId,
+      archetype: loadout.archetype,
+      trendPack: loadout.trendPack,
+    },
+  }));
+  const [sandboxState, setSandboxState] = useState(() => createSandboxState({ seed: 928173, playerName }));
   const pressedKeys = useRef(new Set<string>());
-  const collectedRef = useRef(new Set<string>());
-  const startedAt = useRef(0);
+  const triggerMutationRef = useRef(false);
+  const mineRequestRef = useRef(false);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd'].includes(event.key)) event.preventDefault();
-      pressedKeys.current.add(event.key.toLowerCase());
+      const key = event.key.toLowerCase();
+      if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd', ' ', 'shift', 'x', 'z', 'e', 'f'].includes(key)) event.preventDefault();
+      pressedKeys.current.add(key);
+      if (event.code === 'Space' || key === ' ') {
+        triggerMutationRef.current = true;
+      }
+      if (key === 'e' || key === 'f') {
+        mineRequestRef.current = true;
+      }
     }
+
     function onKeyUp(event: KeyboardEvent) {
       pressedKeys.current.delete(event.key.toLowerCase());
     }
+
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     return () => {
@@ -60,64 +57,142 @@ export function MutationMap({ playerName, rivalName, loadout, onHome }: Mutation
   }, []);
 
   useEffect(() => {
-    if (startedAt.current === 0) startedAt.current = performance.now();
-    let animationFrame = 0;
+    let frame = 0;
     let lastTime = performance.now();
-    function loop(now: number) {
-      if (!finished) {
-        const delta = Math.min(.05, (now - lastTime) / 1000);
-        lastTime = now;
-        const keys = pressedKeys.current;
-        let x = positionRef.current.x;
-        let y = positionRef.current.y;
-        if (keys.has('arrowleft') || keys.has('a')) x -= MOVE_SPEED * delta;
-        if (keys.has('arrowright') || keys.has('d')) x += MOVE_SPEED * delta;
-        if (keys.has('arrowup') || keys.has('w')) y -= MOVE_SPEED * delta;
-        if (keys.has('arrowdown') || keys.has('s')) y += MOVE_SPEED * delta;
-        const next = { x: Math.max(PLAYER_RADIUS, Math.min(100 - PLAYER_RADIUS, x)), y: Math.max(PLAYER_RADIUS, Math.min(100 - PLAYER_RADIUS, y)) };
-        positionRef.current = next;
-        setPosition(next);
 
-        const nextCollected = new Set(collectedRef.current);
-        let gained = 0;
-        MAP_ITEMS.forEach((item) => {
-          if (!nextCollected.has(item.id) && Math.hypot(next.x - item.x, next.y - item.y) < PLAYER_RADIUS + 3) {
-            nextCollected.add(item.id);
-            gained += item.value;
-            setNotice(item.type === 'pack' ? `Mutation Pack collected: +${item.value} Aura.` : '+1 Aura Core collected.');
-          }
+    function loop(now: number) {
+      const delta = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
+
+      setArena((current) => {
+        const keyboardX = (pressedKeys.current.has('d') || pressedKeys.current.has('arrowright') ? 1 : 0) - (pressedKeys.current.has('a') || pressedKeys.current.has('arrowleft') ? 1 : 0);
+        const keyboardY = (pressedKeys.current.has('s') || pressedKeys.current.has('arrowdown') ? 1 : 0) - (pressedKeys.current.has('w') || pressedKeys.current.has('arrowup') ? 1 : 0);
+        const useMutation = triggerMutationRef.current;
+        triggerMutationRef.current = false;
+        return stepMutationArena(current, {
+          playerMoveX: keyboardX,
+          playerMoveY: keyboardY,
+          isDashing: pressedKeys.current.has('shift') || pressedKeys.current.has('x') || pressedKeys.current.has('z'),
+          useMutation,
+          dt: delta,
         });
-        if (gained > 0) {
-          collectedRef.current = nextCollected;
-          setCollected(Array.from(nextCollected));
-          setAura((value) => value + gained);
+      });
+
+      setSandboxState((current) => {
+        let nextPlayer = { ...current.player };
+        const moveDirection = ((pressedKeys.current.has('d') || pressedKeys.current.has('arrowright')) ? 1 : 0) - ((pressedKeys.current.has('a') || pressedKeys.current.has('arrowleft')) ? 1 : 0);
+        const jumpPressed = pressedKeys.current.has('w') || pressedKeys.current.has('arrowup') || pressedKeys.current.has(' ');
+
+        const collidesAt = (x: number, y: number) => {
+          const left = Math.floor(x - nextPlayer.width / 2);
+          const right = Math.floor(x + nextPlayer.width / 2);
+          const top = Math.floor(y - nextPlayer.height / 2);
+          const bottom = Math.floor(y + nextPlayer.height / 2);
+          for (const tile of current.world.tiles) {
+            if (!tile.solid || tile.type === 'air') continue;
+            const insideX = tile.x >= left && tile.x <= right;
+            const insideY = tile.y >= top && tile.y <= bottom;
+            if (insideX && insideY) return true;
+          }
+          return false;
+        };
+
+        const targetVelocityX = moveDirection * 7.5;
+        nextPlayer.velocityX = nextPlayer.velocityX * 0.72 + targetVelocityX * 0.28;
+        if (Math.abs(nextPlayer.velocityX) < 0.1) nextPlayer.velocityX = 0;
+
+        if (jumpPressed && nextPlayer.velocityY === 0 && !collidesAt(nextPlayer.x, nextPlayer.y + 0.18)) {
+          nextPlayer.velocityY = -11.5;
         }
-        const remaining = Math.max(0, ROUND_SECONDS - Math.floor((now - startedAt.current) / 1000));
-        setSecondsLeft(remaining);
-        if (remaining === 0 || nextCollected.size === MAP_ITEMS.length) setFinished(true);
-      }
-      animationFrame = window.requestAnimationFrame(loop);
+
+        nextPlayer.velocityY += 25 * delta;
+
+        const nextX = nextPlayer.x + nextPlayer.velocityX * delta;
+        if (!collidesAt(nextX, nextPlayer.y)) {
+          nextPlayer.x = nextX;
+        } else {
+          nextPlayer.velocityX = 0;
+        }
+
+        const nextY = nextPlayer.y + nextPlayer.velocityY * delta;
+        if (!collidesAt(nextPlayer.x, nextY)) {
+          nextPlayer.y = nextY;
+        } else {
+          if (nextPlayer.velocityY > 0) {
+            nextPlayer.velocityY = 0;
+          }
+        }
+
+        nextPlayer.x = clamp(nextPlayer.x, 2, current.world.width - 2);
+        nextPlayer.y = clamp(nextPlayer.y, 2, current.world.height - 2);
+
+        if (mineRequestRef.current) {
+          const tx = Math.round(nextPlayer.x + (moveDirection || 1) * 1.5);
+          const ty = Math.round(nextPlayer.y);
+          const minedState = mineTile({ ...current, player: nextPlayer }, { x: tx, y: ty, tool: 'pickaxe' });
+          nextPlayer = minedState.player;
+          current = minedState;
+          mineRequestRef.current = false;
+        }
+
+        return {
+          ...current,
+          player: {
+            ...nextPlayer,
+            velocityX: nextPlayer.velocityX,
+            velocityY: nextPlayer.velocityY,
+            mutationCooldown: Math.max(0, nextPlayer.mutationCooldown - delta),
+          },
+          biome: getBiomeFor(current.world, Math.round(nextPlayer.y)),
+        };
+      });
+
+      frame = window.requestAnimationFrame(loop);
     }
-    animationFrame = window.requestAnimationFrame(loop);
-    return () => window.cancelAnimationFrame(animationFrame);
-  }, [finished]);
+
+    frame = window.requestAnimationFrame(loop);
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   function setControl(key: string, active: boolean) {
     if (active) pressedKeys.current.add(key);
     else pressedKeys.current.delete(key);
   }
 
-  const progress = Math.round((collected.length / MAP_ITEMS.length) * 100);
-  const archetypeClass = loadout.archetype.toLowerCase();
+  function handleMine() {
+    mineRequestRef.current = true;
+  }
+
+  const progress = Math.min(100, Math.max(0, Math.round(arena.objective.progress)));
   const mutationLabel = loadout.mutationId.toUpperCase().replace(/-/g, ' ');
+  const archetypeClass = loadout.archetype.toLowerCase();
+  const objectiveText = arena.objective.owner === 'player' ? 'YOU HOLD THE CORE' : arena.objective.owner === 'rival' ? 'RIVAL HOLDS THE CORE' : 'CORE CONTESTED';
+  const winnerLabel = arena.players.player.score >= arena.players.rival.score ? 'YOU WIN' : 'RIVAL WINS';
+  const finished = arena.roundSeconds <= 0;
+  const playerMoving = pressedKeys.current.has('w') || pressedKeys.current.has('a') || pressedKeys.current.has('s') || pressedKeys.current.has('d') || pressedKeys.current.has('arrowup') || pressedKeys.current.has('arrowdown') || pressedKeys.current.has('arrowleft') || pressedKeys.current.has('arrowright');
+  const playerDashing = pressedKeys.current.has('shift') || pressedKeys.current.has('x') || pressedKeys.current.has('z');
+  const biomeLabel = getBiomeFor(sandboxState.world, Math.round(sandboxState.player.y)).toUpperCase().replace(/_/g, ' ');
+  const cameraX = clamp(sandboxState.player.x * TILE_SIZE - VIEWPORT_WIDTH / 2, 0, Math.max(0, sandboxState.world.width * TILE_SIZE - VIEWPORT_WIDTH));
+  const cameraY = clamp(sandboxState.player.y * TILE_SIZE - VIEWPORT_HEIGHT / 2, 0, Math.max(0, sandboxState.world.height * TILE_SIZE - VIEWPORT_HEIGHT));
+  const visibleTiles = sandboxState.world.tiles.filter((tile) => {
+    if (tile.type === 'air') return false;
+    const left = tile.x * TILE_SIZE - cameraX;
+    const top = tile.y * TILE_SIZE - cameraY;
+    return left >= -TILE_SIZE && left <= VIEWPORT_WIDTH + TILE_SIZE && top >= -TILE_SIZE && top <= VIEWPORT_HEIGHT + TILE_SIZE;
+  });
 
   return (
     <main className="mutation-arena-shell">
       <header className="mutation-arena-header">
         <div className="mutation-arena-brand">
           <span className="eyebrow">AURA MUTATION · 2D ARENA</span>
-          <h1>{loadout.trendPack.title} <span>RUN</span></h1>
+          <h1>{arena.trend} <span>RUN</span></h1>
           <p>{loadout.trendPack.theme} · {mutationLabel} · {loadout.archetype.toUpperCase()}</p>
+          <div className="mutation-world-summary" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '6px', fontSize: '9px', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9abcdd' }}>
+            <span>SEED {sandboxState.world.seed}</span>
+            <span>BIOME {biomeLabel}</span>
+            <span>CHUNKS {sandboxState.world.chunks.length}</span>
+          </div>
         </div>
         <button className="mutation-exit-button" onClick={onHome}>EXIT MAP</button>
       </header>
@@ -127,71 +202,124 @@ export function MutationMap({ playerName, rivalName, loadout, onHome }: Mutation
           <div className="arena-avatar">A</div>
           <div className="arena-player-copy">
             <strong>{playerName}</strong>
-            <span>80%</span>
+            <span>{arena.players.player.mutationLabel}</span>
           </div>
-          <div className="arena-health"><i style={{ width: '80%' }} /></div>
+          <div className="arena-health"><i style={{ width: `${Math.min(100, Math.max(0, arena.players.player.aura))}%` }} /></div>
         </div>
         <div className="arena-player-card glow-indigo">
           <div className="arena-avatar">M</div>
           <div className="arena-player-copy">
             <strong>{rivalName}</strong>
-            <span>70%</span>
+            <span>{arena.players.rival.mutationLabel}</span>
           </div>
-          <div className="arena-health"><i style={{ width: '70%' }} /></div>
+          <div className="arena-health"><i style={{ width: `${Math.min(100, Math.max(0, arena.players.rival.aura))}%` }} /></div>
         </div>
         <div className="arena-player-card glow-gold">
           <div className="arena-avatar">R</div>
           <div className="arena-player-copy">
-            <strong>ROGUE</strong>
-            <span>40%</span>
+            <strong>CORE</strong>
+            <span>{objectiveText}</span>
           </div>
-          <div className="arena-health"><i style={{ width: '40%' }} /></div>
+          <div className="arena-health"><i style={{ width: `${progress}%` }} /></div>
         </div>
         <div className="arena-player-card glow-green">
-          <div className="arena-avatar">R</div>
+          <div className="arena-avatar">T</div>
           <div className="arena-player-copy">
-            <strong>RANGER</strong>
-            <span>90%</span>
+            <strong>TIMER</strong>
+            <span>{Math.ceil(arena.roundSeconds)}s</span>
           </div>
-          <div className="arena-health"><i style={{ width: '90%' }} /></div>
+          <div className="arena-health"><i style={{ width: `${(arena.roundSeconds / 45) * 100}%` }} /></div>
         </div>
       </section>
 
       <section className="mutation-arena-layout">
         <div className="mutation-board-wrap">
           <div className="mutation-board" aria-label="2D Aura Mutation map">
+            <div className="terraria-banner">TERRARIA</div>
             <div className="map-grid-lines" aria-hidden="true" />
             <div className="arena-hills hill-left" aria-hidden="true" />
             <div className="arena-hills hill-right" aria-hidden="true" />
             <div className="arena-structure left-ruin" aria-hidden="true" />
             <div className="arena-structure right-ruin" aria-hidden="true" />
-            <div className="objective-zone"><span>OBJECTIVE</span><strong>ENERGY CORE</strong></div>
-            {MAP_ITEMS.map((item) => !collected.includes(item.id) && <div key={item.id} className={`map-item map-item-${item.type}`} style={{ left: `${item.x}%`, top: `${item.y}%` }}><span>{item.type === 'pack' ? '▣' : '✦'}</span><small>{item.type === 'pack' ? 'PACK' : 'AURA'}</small></div>)}
-            <div className="map-rival" style={{ left: '82%', top: '67%' }}><span>◆</span><small>{rivalName}</small></div>
-            <div className="map-player" style={{ left: `${position.x}%`, top: `${position.y}%` }}><span>✦</span><small>{playerName}</small></div>
-            {finished && <div className="mutation-finished-overlay"><span className="eyebrow">RUN COMPLETE</span><h2>{aura} AURA</h2><p>{collected.length === MAP_ITEMS.length ? 'Every item collected.' : 'Time is up. Your snapshot is ready.'}</p><button onClick={onHome}>RETURN HOME</button></div>}
+            <div className="pixel-tree tree-left" aria-hidden="true" />
+            <div className="pixel-tree tree-right" aria-hidden="true" />
+            <div className="pixel-ground" aria-hidden="true" />
+
+            {visibleTiles.map((tile) => (
+              <div
+                key={tile.id}
+                className="terrain-tile"
+                style={{
+                  left: `${tile.x * TILE_SIZE - cameraX}px`,
+                  top: `${tile.y * TILE_SIZE - cameraY}px`,
+                  width: `${TILE_SIZE}px`,
+                  height: `${TILE_SIZE}px`,
+                  background: tile.background,
+                  opacity: tile.type === 'air' ? 0 : 1,
+                  border: tile.type === 'air' ? 'none' : '1px solid rgba(255,255,255,0.08)',
+                }}
+              />
+            ))}
+
+            <div className="objective-zone" style={{ left: `${(arena.objective.x / arena.bounds.width) * 100}%`, top: `${(arena.objective.y / arena.bounds.height) * 100}%` }}><span>OBJECTIVE</span><strong>{progress}%</strong></div>
+            {arena.pickups.filter((item) => item.active).map((item) => (
+              <div key={item.id} className={`map-item map-item-${item.kind}`} style={{ left: `${(item.x / arena.bounds.width) * 100}%`, top: `${(item.y / arena.bounds.height) * 100}%` }}>
+                <span>{item.kind === 'pack' ? '▣' : '✦'}</span>
+                <small>{item.kind === 'pack' ? 'PACK' : 'AURA'}</small>
+              </div>
+            ))}
+            <div className={`sprite-character rival-sprite ${playerMoving ? 'is-moving' : 'is-idle'}`} style={{ left: `${(arena.players.rival.x / arena.bounds.width) * 100}%`, top: `${(arena.players.rival.y / arena.bounds.height) * 100}%` }}>
+              <div className="sprite-shadow" />
+              <div className="sprite-head" />
+              <div className="sprite-body" />
+              <div className="sprite-arm left" />
+              <div className="sprite-arm right" />
+              <div className="sprite-leg left" />
+              <div className="sprite-leg right" />
+              <small>{rivalName}</small>
+            </div>
+            <div className={`sprite-character player-sprite ${skinId} ${playerMoving ? 'is-moving' : 'is-idle'} ${playerDashing ? 'is-dashing' : ''}`} style={{ left: `${sandboxState.player.x * TILE_SIZE - cameraX}px`, top: `${sandboxState.player.y * TILE_SIZE - cameraY}px` }}>
+              <div className="sprite-shadow" />
+              <div className="sprite-ring" />
+              <div className="sprite-cape" />
+              <div className="sprite-head">
+                <span className="visor" />
+                <span className="aura-core" />
+              </div>
+              <div className="sprite-body">
+                <span className="body-core" />
+                <span className="body-line line-left" />
+                <span className="body-line line-right" />
+              </div>
+              <div className="sprite-arm left" />
+              <div className="sprite-arm right" />
+              <div className="sprite-leg left" />
+              <div className="sprite-leg right" />
+              <small>{playerName}</small>
+            </div>
+            {finished && <div className="mutation-finished-overlay"><span className="eyebrow">RUN COMPLETE</span><h2>{winnerLabel}</h2><p>{arena.message}</p><button onClick={onHome}>RETURN HOME</button></div>}
           </div>
 
           <div className="arena-capsule-bar" aria-label="Combat action bar">
             <button className={archetypeClass === 'mobility' ? 'active' : ''}>MOBILITY</button>
             <button className={archetypeClass === 'stability' ? 'active' : ''}>STABILITY</button>
             <button className={archetypeClass === 'volatility' ? 'active' : ''}>VOLATILITY</button>
-            <button className="hud-value">{aura} AURA</button>
-            <button className="hud-value">{secondsLeft}s</button>
+            <button className="hud-value" onClick={handleMine}>{sandboxState.inventory.stone + sandboxState.inventory.ore + sandboxState.inventory.crystal} ORE</button>
+            <button className="hud-value">{Math.ceil(arena.roundSeconds)}s</button>
           </div>
 
           <div className="mutation-touch-controls" aria-label="Touch movement controls">
-            <button onPointerDown={() => setControl('arrowup', true)} onPointerUp={() => setControl('arrowup', false)} onPointerLeave={() => setControl('arrowup', false)}>▲</button>
-            <div><button onPointerDown={() => setControl('arrowleft', true)} onPointerUp={() => setControl('arrowleft', false)} onPointerLeave={() => setControl('arrowleft', false)}>◀</button><button onPointerDown={() => setControl('arrowdown', true)} onPointerUp={() => setControl('arrowdown', false)} onPointerLeave={() => setControl('arrowdown', false)}>▼</button><button onPointerDown={() => setControl('arrowright', true)} onPointerUp={() => setControl('arrowright', false)} onPointerLeave={() => setControl('arrowright', false)}>▶</button></div>
+            <button onPointerDown={() => setControl('w', true)} onPointerUp={() => setControl('w', false)} onPointerLeave={() => setControl('w', false)}>▲</button>
+            <div><button onPointerDown={() => setControl('a', true)} onPointerUp={() => setControl('a', false)} onPointerLeave={() => setControl('a', false)}>◀</button><button onPointerDown={() => setControl('s', true)} onPointerUp={() => setControl('s', false)} onPointerLeave={() => setControl('s', false)}>▼</button><button onPointerDown={() => setControl('d', true)} onPointerUp={() => setControl('d', false)} onPointerLeave={() => setControl('d', false)}>▶</button></div>
           </div>
         </div>
 
         <aside className="mutation-side-panel">
           <div className="mutation-objective">
             <span className="eyebrow">CURRENT OBJECTIVE</span>
-            <h2>COLLECT THE FIELD</h2>
+            <h2>{objectiveText}</h2>
             <div className="mutation-objective-bar"><i style={{ width: `${progress}%` }} /></div>
-            <strong>{progress}% COMPLETE</strong>
+            <strong>{progress}% CONTROL</strong>
           </div>
 
           <div className="mutation-rule-card">
@@ -199,8 +327,14 @@ export function MutationMap({ playerName, rivalName, loadout, onHome }: Mutation
             {loadout.trendPack.rules.map((rule) => <p key={rule}>• {rule}</p>)}
           </div>
 
-          <div className="mutation-notice" role="status">{notice}</div>
-          <p className="mutation-controls-hint">MOVE WITH WASD OR ARROW KEYS. TOUCH CONTROLS ARE AVAILABLE ON MOBILE.</p>
+          <div className="mutation-note-panel" style={{ marginTop: '14px', padding: '10px 12px', borderRadius: '10px', background: 'rgba(126, 201, 255, 0.08)', border: '1px solid rgba(126, 201, 255, 0.2)', color: '#d9ebff' }}>
+            <div style={{ fontSize: '8px', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#8ab4df' }}>WORLD STATE</div>
+            <div style={{ marginTop: '6px', fontSize: '11px' }}>{biomeLabel}</div>
+            <div style={{ marginTop: '4px', fontSize: '10px', color: '#a7daf8' }}>INV: {sandboxState.inventory.wood} wood / {sandboxState.inventory.stone} stone / {sandboxState.inventory.ore} ore</div>
+          </div>
+
+          <div className="mutation-notice" role="status">{arena.message}</div>
+          <p className="mutation-controls-hint">MOVE WITH WASD OR ARROW KEYS. PRESS SPACE FOR MUTATION BURST. HOLD SHIFT/X/Z TO DASH. PRESS E/F TO MINE.</p>
         </aside>
       </section>
     </main>

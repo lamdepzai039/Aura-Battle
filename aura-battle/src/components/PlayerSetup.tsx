@@ -8,7 +8,7 @@ export function PlayerSetup({
   onBack,
 }: {
   mode: GameMode;
-  onStart: (p1: string, p2: string, customPrompt: string, mutation?: MutationLoadout) => void;
+  onStart: (p1: string, p2: string, customPrompt: string, mutation?: MutationLoadout, skinId?: 'skin-1' | 'skin-2' | 'skin-3') => void;
   onBack: () => void;
 }) {
   const [p1, setP1] = useState('PLAYER 1');
@@ -24,6 +24,7 @@ export function PlayerSetup({
   const [archetype, setArchetype] = useState<MutationArchetype>(DEFAULT_MUTATION_ARCHETYPE);
   const [mutationId, setMutationId] = useState(DEFAULT_MUTATION_ID);
   const [trendId, setTrendId] = useState(DEFAULT_TREND_PACK.id);
+  const [playerSkinId, setPlayerSkinId] = useState<'skin-1' | 'skin-2' | 'skin-3'>('skin-1');
   const availableMutations = mutationsForArchetype(archetype);
   const selectedMutation = availableMutations.find((mutation) => mutation.id === mutationId) ?? availableMutations[0];
   const selectedTrend = TREND_PACKS.find((trend) => trend.id === trendId) ?? DEFAULT_TREND_PACK;
@@ -56,6 +57,30 @@ export function PlayerSetup({
           <section className="mutation-setup-panel" aria-labelledby="mutation-setup-title">
             <span className="eyebrow">AURA MUTATION LOADOUT</span>
             <h2 id="mutation-setup-title">Choose your direction</h2>
+
+            <div className="character-skin-picker" aria-label="Character skin selection">
+              {([
+                { id: 'skin-1', name: 'AQUA CORE', accent: 'skin-1', summary: 'Cyan tech guardian' },
+                { id: 'skin-2', name: 'VOID WARD', accent: 'skin-2', summary: 'Purple specter' },
+                { id: 'skin-3', name: 'EMBER RUNE', accent: 'skin-3', summary: 'Gold aura hunter' },
+              ] as const).map((skin) => (
+                <button
+                  key={skin.id}
+                  type="button"
+                  className={playerSkinId === skin.id ? 'active' : ''}
+                  onClick={() => setPlayerSkinId(skin.id)}
+                >
+                  <span className={`skin-mini ${skin.accent}`} aria-hidden="true">
+                    <span className="mini-head" />
+                    <span className="mini-body" />
+                    <span className="mini-core" />
+                  </span>
+                  <strong>{skin.name}</strong>
+                  <small>{skin.summary}</small>
+                </button>
+              ))}
+            </div>
+
             <div className="mutation-archetypes">
               {(['mobility', 'stability', 'volatility'] as MutationArchetype[]).map((item) => (
                 <button type="button" key={item} className={archetype === item ? 'active' : ''} onClick={() => chooseArchetype(item)}>{item}</button>
@@ -83,7 +108,7 @@ export function PlayerSetup({
           BACK
         </button>
         <button
-          onClick={() => onStart(p1 || 'PLAYER 1', p2 || 'PLAYER 2', prompt, mode === 'mutation' && selectedMutation ? { archetype, mutationId: selectedMutation.id, trendPack: selectedTrend } : undefined)}
+          onClick={() => onStart(p1 || 'PLAYER 1', p2 || 'PLAYER 2', prompt, mode === 'mutation' && selectedMutation ? { archetype, mutationId: selectedMutation.id, trendPack: selectedTrend } : undefined, playerSkinId)}
           className="px-8 py-3 rounded-full font-display text-sm tracking-wide bg-cyan-400 text-black hover:bg-cyan-300 transition"
         >
           START BATTLE

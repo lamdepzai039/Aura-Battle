@@ -1,0 +1,16 @@
+{
+  "name": "aura-battle-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "npm --prefix ./aura-battle run dev",
+    "dev:client": "npm --prefix ./aura-battle run dev:client",
+    "dev:server": "npm --prefix ./aura-battle run dev:server",
+    "dev:all": "npm --prefix ./aura-battle run dev:all",
+    "server": "npm --prefix ./aura-battle run server",
+    "build": "npm --prefix ./aura-battle run build",
+    "lint": "npm --prefix ./aura-battle run lint",
+    "test": "npm --prefix ./aura-battle exec -- vitest run",
+    "preview": "npm --prefix ./aura-battle run preview"
+  }
+}
