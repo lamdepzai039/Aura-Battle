@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  collectNearbyLoot,
   createSandboxState,
   createWorld,
   mineTile,
+  updateEnemyState,
   useMutation,
 } from './auraMutationSandbox';
 
@@ -33,5 +35,23 @@ describe('Aura Mutation sandbox foundation', () => {
     expect(next.player.energy).toBeLessThan(state.player.energy);
     expect(next.player.mutationCooldown).toBeGreaterThan(0);
     expect(next.player.activeMutationId).toBe('momentum-dash');
+  });
+
+  it('enemy mobs and nearby loot are simulated in the world state', () => {
+    const state = createSandboxState({ seed: 29, playerName: 'Aster' });
+
+    expect(state.enemies.length).toBeGreaterThan(0);
+    expect(state.enemies[0].health).toBeGreaterThan(0);
+
+    const updated = updateEnemyState(state, 0.016);
+    expect(updated.enemies.length).toBeGreaterThan(0);
+
+    const lootState = collectNearbyLoot({
+      ...updated,
+      player: { ...updated.player, x: updated.loot[0]?.x ?? updated.player.x, y: updated.loot[0]?.y ?? updated.player.y },
+      loot: updated.loot.length > 0 ? [{ ...updated.loot[0], collected: false }] : [],
+    });
+
+    expect(lootState.inventory.ore >= 0 || lootState.inventory.crystal >= 0 || lootState.inventory.auraShard >= 0).toBe(true);
   });
 });

@@ -30,7 +30,7 @@ import { applyMatchResult } from './utils/rankStore';
 import { awardMatchOutcome } from './utils/shopEconomy';
 import type { GameMode, MatchState, MutationLoadout, PlayerId } from './game/types';
 
-type AppPhase = 'login' | 'home' | 'shop' | 'guild' | 'settings' | 'mode_select' | 'camera_check' | 'player_setup' | 'mutation_map' | 'online_waiting' | 'battle' | 'leaderboard';
+type AppPhase = 'login' | 'home' | 'shop' | 'guild' | 'settings' | 'mode_select' | 'camera_check' | 'player_setup' | 'transition' | 'mutation_map' | 'online_waiting' | 'battle' | 'leaderboard';
 const DEV = import.meta.env.DEV;
 
 type OnlineLobbySession = {
@@ -47,6 +47,7 @@ export default function App() {
   const [sessionEmail, setSessionEmail] = useState(() => getSessionEmail());
   const [pendingMode, setPendingMode] = useState<GameMode>('local');
   const [mutationSession, setMutationSession] = useState<{ playerName: string; rivalName: string; loadout: MutationLoadout; skinId: 'skin-1' | 'skin-2' | 'skin-3' } | null>(null);
+  const [transitionTarget, setTransitionTarget] = useState<'mutation_map' | 'battle' | null>(null);
   const [onlineLobby, setOnlineLobby] = useState<OnlineLobbySession | null>(null);
   const onlineSocketRef = useRef<WebSocket | null>(null);
   const recordedRef = useRef(false);
@@ -99,6 +100,22 @@ export default function App() {
     }
     if (match.screen === 'round_intro' && match.roundIndex === 0 && match.history.length === 0) recordedRef.current = false;
   }, [match.screen, match.roundIndex, match.history, match.mode, match.players, winner]);
+
+  useEffect(() => {
+    if (phase !== 'transition' || !transitionTarget) return;
+
+    const timeout = window.setTimeout(() => {
+      if (transitionTarget === 'mutation_map') {
+        setPhase('mutation_map');
+      } else if (transitionTarget === 'battle') {
+        setPhase('battle');
+      } else {
+        setPhase('home');
+      }
+    }, 900);
+
+    return () => window.clearTimeout(timeout);
+  }, [phase, transitionTarget]);
 
   useEffect(() => {
     if (!onlineLobby?.roomCode) {
@@ -190,14 +207,27 @@ export default function App() {
   if (phase === 'player_setup') return <PlayerSetup mode={pendingMode} onBack={() => setPhase('mode_select')} onStart={(p1, p2, prompt, mutation: MutationLoadout | undefined, skinId: 'skin-1' | 'skin-2' | 'skin-3' = 'skin-1') => {
     if (pendingMode === 'mutation' && mutation) {
       setMutationSession({ playerName: p1, rivalName: p2, loadout: mutation, skinId });
-      setPhase('mutation_map');
+      setTransitionTarget('mutation_map');
+      setPhase('transition');
       return;
     }
     startMatch(pendingMode, prompt, mutation);
     setPlayerName('p1', p1);
     setPlayerName('p2', p2);
-    setPhase('battle');
+    setTransitionTarget('battle');
+    setPhase('transition');
   }} />;
+
+  if (phase === 'transition') return (
+    <div className="scene-transition-screen" role="status" aria-live="polite">
+      <div className="transition-glow" />
+      <div className="transition-rings" />
+      <div className="transition-core">
+        <span className="transition-label">AURA SHIFT</span>
+        <strong>{transitionTarget === 'mutation_map' ? 'ENTERING MUTATION ZONE' : 'STARTING BATTLE'}</strong>
+      </div>
+    </div>
+  );
 
   if (phase === 'mutation_map' && mutationSession) return <MutationMap playerName={mutationSession.playerName} rivalName={mutationSession.rivalName} loadout={mutationSession.loadout} skinId={mutationSession.skinId} onHome={() => { setMutationSession(null); setPhase('home'); }} />;
 

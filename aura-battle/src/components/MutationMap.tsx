@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createMutationArenaState, stepMutationArena } from '../game/auraMutationArena';
-import { createSandboxState, getBiomeFor, mineTile } from '../game/auraMutationSandbox';
+import { collectNearbyLoot, createSandboxState, getBiomeFor, mineTile, updateEnemyState } from '../game/auraMutationSandbox';
 import type { MutationLoadout } from '../game/types';
 
 const TILE_SIZE = 20;
@@ -135,6 +135,11 @@ export function MutationMap({ playerName, rivalName, loadout, skinId = 'skin-1',
           mineRequestRef.current = false;
         }
 
+        const enemyState = updateEnemyState({ ...current, player: nextPlayer }, delta);
+        const lootState = collectNearbyLoot(enemyState);
+        nextPlayer = lootState.player;
+        current = lootState;
+
         return {
           ...current,
           player: {
@@ -235,7 +240,6 @@ export function MutationMap({ playerName, rivalName, loadout, skinId = 'skin-1',
       <section className="mutation-arena-layout">
         <div className="mutation-board-wrap">
           <div className="mutation-board" aria-label="2D Aura Mutation map">
-            <div className="terraria-banner">TERRARIA</div>
             <div className="map-grid-lines" aria-hidden="true" />
             <div className="arena-hills hill-left" aria-hidden="true" />
             <div className="arena-hills hill-right" aria-hidden="true" />
@@ -266,6 +270,24 @@ export function MutationMap({ playerName, rivalName, loadout, skinId = 'skin-1',
               <div key={item.id} className={`map-item map-item-${item.kind}`} style={{ left: `${(item.x / arena.bounds.width) * 100}%`, top: `${(item.y / arena.bounds.height) * 100}%` }}>
                 <span>{item.kind === 'pack' ? '▣' : '✦'}</span>
                 <small>{item.kind === 'pack' ? 'PACK' : 'AURA'}</small>
+              </div>
+            ))}
+            {sandboxState.loot.filter((drop) => !drop.collected).map((drop) => (
+              <div key={drop.id} className="map-item map-item-pack" style={{ left: `${(drop.x * TILE_SIZE) - cameraX}px`, top: `${(drop.y * TILE_SIZE) - cameraY}px` }}>
+                <span>{drop.type === 'crystal' ? '✦' : drop.type === 'ore' ? '⬢' : drop.type === 'stone' ? '◼' : '▣'}</span>
+                <small>{drop.type.toUpperCase()}</small>
+              </div>
+            ))}
+            {sandboxState.enemies.map((enemy) => (
+              <div key={enemy.id} className="sprite-character rival-sprite is-moving" style={{ left: `${enemy.x * TILE_SIZE - cameraX}px`, top: `${enemy.y * TILE_SIZE - cameraY}px` }}>
+                <div className="sprite-shadow" />
+                <div className="sprite-head" />
+                <div className="sprite-body" />
+                <div className="sprite-arm left" />
+                <div className="sprite-arm right" />
+                <div className="sprite-leg left" />
+                <div className="sprite-leg right" />
+                <small>{enemy.kind.toUpperCase()}</small>
               </div>
             ))}
             <div className={`sprite-character rival-sprite ${playerMoving ? 'is-moving' : 'is-idle'}`} style={{ left: `${(arena.players.rival.x / arena.bounds.width) * 100}%`, top: `${(arena.players.rival.y / arena.bounds.height) * 100}%` }}>

@@ -70,6 +70,29 @@ export interface PlayerState {
   activeMutationId: string | null;
 }
 
+export interface EnemyState {
+  id: string;
+  kind: 'drifter' | 'brute' | 'wisp';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  health: number;
+  maxHealth: number;
+  speed: number;
+  damage: number;
+  direction: 1 | -1;
+}
+
+export interface LootDrop {
+  id: string;
+  x: number;
+  y: number;
+  type: keyof InventoryState;
+  value: number;
+  collected: boolean;
+}
+
 export interface SandboxState {
   world: WorldDefinition;
   player: PlayerState;
@@ -78,6 +101,8 @@ export interface SandboxState {
   biome: BiomeType;
   activeEvent: string;
   eventLog: string[];
+  enemies: EnemyState[];
+  loot: LootDrop[];
 }
 
 export const MUTATION_LIBRARY: Record<string, MutationSpec> = {
@@ -295,6 +320,19 @@ export function createSandboxState(options: { seed?: number; playerName?: string
   const world = createWorld({ seed, width: options.width ?? 160, height: options.height ?? 64, chunkSize: 16 });
   const baseY = Math.floor(world.height * 0.54) + 2;
 
+  const enemies: EnemyState[] = [
+    { id: 'enemy-1', kind: 'drifter', x: 22, y: baseY - 3, width: 1.2, height: 2, health: 28, maxHealth: 28, speed: 1.6, damage: 9, direction: -1 },
+    { id: 'enemy-2', kind: 'brute', x: 38, y: baseY - 2, width: 1.5, height: 2.1, health: 38, maxHealth: 38, speed: 1.2, damage: 12, direction: 1 },
+    { id: 'enemy-3', kind: 'wisp', x: 54, y: baseY - 5, width: 1, height: 1, health: 22, maxHealth: 22, speed: 2.1, damage: 7, direction: -1 },
+  ];
+
+  const loot: LootDrop[] = [
+    { id: 'loot-1', x: 16, y: baseY - 4, type: 'wood', value: 1, collected: false },
+    { id: 'loot-2', x: 29, y: baseY - 5, type: 'ore', value: 1, collected: false },
+    { id: 'loot-3', x: 46, y: baseY - 3, type: 'crystal', value: 1, collected: false },
+    { id: 'loot-4', x: 62, y: baseY - 4, type: 'stone', value: 1, collected: false },
+  ];
+
   const state: SandboxState = {
     world,
     player: {
@@ -325,9 +363,69 @@ export function createSandboxState(options: { seed?: number; playerName?: string
     biome: 'aura_forest',
     activeEvent: 'LOCK IN',
     eventLog: ['World generated with seed 928173.', 'AURA FOREST scanned.'],
+    enemies,
+    loot,
   };
 
   return state;
+}
+
+export function updateEnemyState(state: SandboxState, delta: number): SandboxState {
+  let nextPlayer = { ...state.player };
+  const nextEnemies = state.enemies.map((enemy) => {
+    const dx = nextPlayer.x - enemy.x;
+    const dy = nextPlayer.y - enemy.y;
+    const distance = Math.hypot(dx, dy) || 1;
+    const nextDirection: 1 | -1 = dx >= 0 ? 1 : -1;
+
+    let nextX = enemy.x;
+    let nextY = enemy.y;
+    if (distance > 1.2) {
+      nextX += (dx / distance) * enemy.speed * delta;
+      nextY += (dy / distance) * enemy.speed * delta;
+    }
+
+    if (distance < 1.5) {
+      nextPlayer = {
+        ...nextPlayer,
+        health: Math.max(0, nextPlayer.health - enemy.damage * delta * 12),
+      };
+    }
+
+    return {
+      ...enemy,
+      x: nextX,
+      y: nextY,
+      direction: nextDirection,
+    };
+  });
+
+  return {
+    ...state,
+    player: nextPlayer,
+    enemies: nextEnemies,
+    eventLog: nextPlayer.health < state.player.health ? [...state.eventLog, 'A mutant struck you.'] : state.eventLog,
+  };
+}
+
+export function collectNearbyLoot(state: SandboxState): SandboxState {
+  const collected = state.loot.filter((drop) => !drop.collected && Math.hypot(drop.x - state.player.x, drop.y - state.player.y) < 1.8);
+  if (collected.length === 0) return state;
+
+  const nextInventory = { ...state.inventory };
+  const nextLoot = state.loot.map((drop) => {
+    const isCollected = collected.some((item) => item.id === drop.id);
+    if (!isCollected) return drop;
+    nextInventory[drop.type] = (nextInventory[drop.type] ?? 0) + drop.value;
+    return { ...drop, collected: true };
+  });
+
+  return {
+    ...state,
+    inventory: nextInventory,
+    loot: nextLoot,
+    eventLog: [...state.eventLog, `Recovered ${collected.map((drop) => drop.type).join(', ')}.`],
+  };
 }
 
 export function mineTile(state: SandboxState, action: { x: number; y: number; tool: ToolType }): SandboxState {
