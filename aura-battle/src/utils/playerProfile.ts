@@ -1,3 +1,5 @@
+import { getRankProfile, getTierEmoji, getTierName } from './rankStore';
+
 export type PlayerProfile = {
   level: number;
   rank: string;
@@ -14,7 +16,16 @@ export function isAdminAccount(username: string | null | undefined, email?: stri
 
 export function getPlayerProfile(username: string | null | undefined, email?: string | null): PlayerProfile {
   const isAdmin = isAdminAccount(username, email);
-  return isAdmin
-    ? { level: 99, rank: 'MASTER III', rankEmoji: '👑', rating: 99999, isAdmin }
-    : { level: 1, rank: 'BRONZE I', rankEmoji: '🟫', rating: 0, isAdmin };
+  if (isAdmin) {
+    return { level: 99, rank: 'MASTER III', rankEmoji: '👑', rating: 99999, isAdmin };
+  }
+
+  const profile = getRankProfile(username ?? 'PLAYER');
+  return {
+    level: Math.min(99, 1 + Math.floor(profile.rating / 200)),
+    rank: getTierName(profile.rating),
+    rankEmoji: getTierEmoji(profile.rating),
+    rating: profile.rating,
+    isAdmin,
+  };
 }

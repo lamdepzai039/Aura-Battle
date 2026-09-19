@@ -1,3 +1,5 @@
+import { awardRewardText } from './shopEconomy';
+
 export type DailyReward = {
   day: number;
   label: string;
@@ -98,6 +100,7 @@ export function claimDailyReward(): { success: boolean; day?: number; state: Dai
     return { success: false, state, message: 'Reward already claimed for today.' };
   }
 
+  const reward = DAILY_LOGIN_REWARDS.find((entry) => entry.day === today);
   const nextState: DailyLoginState = {
     claimedDays: [...new Set([...state.claimedDays, today])],
     lastClaimedDate: new Date().toISOString(),
@@ -105,5 +108,10 @@ export function claimDailyReward(): { success: boolean; day?: number; state: Dai
   };
 
   writeState(nextState);
+
+  if (reward) {
+    awardRewardText(`${reward.amount} ${reward.label}`);
+  }
+
   return { success: true, day: today, state: nextState, message: `Day ${today} reward claimed.` };
 }

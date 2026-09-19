@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { RANDOM_QUEST_POOL, getActiveEvent } from './eventStore';
+import { RANDOM_QUEST_POOL, getActiveEvent, getEventCatalog } from './eventStore';
 
 const makeStorage = () => {
   const store = new Map<string, string>();
@@ -36,5 +36,14 @@ describe('quest board generation', () => {
     expect(new Set(alice.tasks.map((task) => task.id)).size).toBe(5);
     expect(new Set(bob.tasks.map((task) => task.id)).size).toBe(5);
     expect(alice.tasks.some((task) => bob.tasks.some((other) => other.id === task.id))).toBe(false);
+  });
+
+  it('exposes a full event catalog with daily, weekly, rush, and mutation events', () => {
+    const catalog = getEventCatalog('alice');
+
+    expect(catalog.map((event) => event.kind)).toEqual(['daily', 'weekly', 'rush', 'mutation']);
+    expect(catalog.every((event) => event.tasks.length >= 3)).toBe(true);
+    expect(catalog.some((event) => event.title.toLowerCase().includes('rush'))).toBe(true);
+    expect(catalog.some((event) => event.title.toLowerCase().includes('mutation'))).toBe(true);
   });
 });

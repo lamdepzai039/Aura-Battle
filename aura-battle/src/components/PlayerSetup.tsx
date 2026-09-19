@@ -12,7 +12,14 @@ export function PlayerSetup({
   onBack: () => void;
 }) {
   const [p1, setP1] = useState('PLAYER 1');
-  const [p2, setP2] = useState(mode === 'ai' ? 'AI BOT' : mode === 'mutation' ? 'MUTANT OPPONENT' : 'PLAYER 2');
+  const [p2, setP2] = useState(
+    mode === 'ai' ? 'AI BOT' :
+    mode === 'mutation' ? 'MUTANT OPPONENT' :
+    mode === 'duo' ? 'TEAM B' :
+    mode === 'crew' ? 'CREW B' :
+    mode === 'ranked' ? 'RIVAL RANKED' :
+    'PLAYER 2',
+  );
   const [prompt, setPrompt] = useState('');
   const [archetype, setArchetype] = useState<MutationArchetype>(DEFAULT_MUTATION_ARCHETYPE);
   const [mutationId, setMutationId] = useState(DEFAULT_MUTATION_ID);

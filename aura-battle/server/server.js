@@ -5,6 +5,7 @@ const app = express();
 const PORT = Number(process.env.PORT || 3001);
 const rooms = new Map();
 const socketRooms = new Map();
+const ROOM_CAPACITY = 2;
 
 function makeRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -20,12 +21,14 @@ function normalizeUsername(value) {
   return name.slice(0, 24).replace(/[^\p{L}\p{N}\s_.-]/gu, '').trim() || 'Player';
 }
 
-function normalizeRoom(room) {
+function getRoomSnapshot(room) {
+  const host = room.host ? normalizeUsername(room.host) : 'Host';
+  const guest = room.guest ? normalizeUsername(room.guest) : null;
   return {
     code: room.code,
-    host: normalizeUsername(room.host),
-    guest: room.guest ? normalizeUsername(room.guest) : null,
-    status: room.guest ? 'ready' : 'waiting',
+    host,
+    guest,
+    status: guest ? 'ready' : 'waiting',
     phase: room.phase || 'waiting',
     createdAt: room.createdAt,
     hostReady: Boolean(room.hostReady),
@@ -38,7 +41,8 @@ function normalizeRoom(room) {
 function broadcastRoom(roomCode) {
   const room = rooms.get(roomCode);
   if (!room) return;
-  const payload = JSON.stringify({ type: 'room_state', room: normalizeRoom(room) });
+  ensureRoomState(room);
+  const payload = JSON.stringify({ type: 'room_state', room: getRoomSnapshot(room) });
   room.clients.forEach((client) => {
     if (client.readyState === 1) client.send(payload);
   });
@@ -47,9 +51,10 @@ function broadcastRoom(roomCode) {
 function broadcastMatchStart(roomCode) {
   const room = rooms.get(roomCode);
   if (!room) return;
+  ensureRoomState(room);
   const payload = JSON.stringify({
     type: 'match_start',
-    room: normalizeRoom(room),
+    room: getRoomSnapshot(room),
     seed: room.matchSeed,
     startedAt: room.startedAt,
   });
@@ -64,6 +69,9 @@ function ensureRoomState(room) {
   if (!room.hostReady) room.hostReady = false;
   if (!room.guestReady) room.guestReady = false;
   if (!room.matchSeed) room.matchSeed = null;
+  if (!room.guest && room.phase === 'playing') room.phase = 'waiting';
+  if (room.guest && room.hostReady && room.guestReady && room.phase !== 'playing') room.phase = 'ready';
+  if (!room.guest) room.phase = 'waiting';
 }
 
 function leaveRoom(ws) {
@@ -86,32 +94,34 @@ function leaveRoom(ws) {
     room.guestSocket = null;
     room.guestReady = false;
     room.phase = 'waiting';
+    room.startedAt = null;
+    room.matchSeed = null;
   } else if (isHost) {
-    room.host = 'Host';
-    room.hostSocket = null;
-    room.hostReady = false;
-    room.guest = null;
-    room.guestSocket = null;
-    room.guestReady = false;
-    room.phase = 'waiting';
+    rooms.delete(roomCode);
+    room.clients = room.clients.filter((client) => client !== ws);
+    socketRooms.delete(ws);
+    return;
   }
 
   if (isGuest) {
     room.guest = null;
     room.guestSocket = null;
     room.guestReady = false;
-    room.phase = 'waiting';
+    room.startedAt = null;
+    room.matchSeed = null;
   }
 
   room.clients = room.clients.filter((client) => client !== ws);
   socketRooms.delete(ws);
 
-  if (!room.hostSocket && room.clients.length === 0) {
+  if (!room.hostSocket && !room.guestSocket && room.clients.length === 0) {
     rooms.delete(roomCode);
     return;
   }
 
-  if (!room.guest && room.hostSocket) {
+  if (!room.guest) {
+    room.hostReady = false;
+    room.guestReady = false;
     room.phase = 'waiting';
   }
 
@@ -149,7 +159,7 @@ wss.on('connection', (ws) => {
         if (existingRoomCode) {
           const existingRoom = rooms.get(existingRoomCode);
           if (existingRoom) {
-            ws.send(JSON.stringify({ type: 'room_state', room: normalizeRoom(existingRoom), you: 'host' }));
+            ws.send(JSON.stringify({ type: 'room_state', room: getRoomSnapshot(existingRoom), you: 'host' }));
             return;
           }
         }
@@ -168,11 +178,12 @@ wss.on('connection', (ws) => {
           phase: 'waiting',
           startedAt: null,
           matchSeed: null,
+          maxPlayers: ROOM_CAPACITY,
         };
 
         rooms.set(code, room);
         socketRooms.set(ws, code);
-        ws.send(JSON.stringify({ type: 'room_state', room: normalizeRoom(room), you: 'host' }));
+        ws.send(JSON.stringify({ type: 'room_state', room: getRoomSnapshot(room), you: 'host' }));
         return;
       }
 
@@ -184,17 +195,18 @@ wss.on('connection', (ws) => {
         }
 
         if (socketRooms.get(ws) === room.code) {
-          ws.send(JSON.stringify({ type: 'room_state', room: normalizeRoom(room), you: 'guest' }));
+          ws.send(JSON.stringify({ type: 'room_state', room: getRoomSnapshot(room), you: room.hostSocket === ws ? 'host' : 'guest' }));
           return;
         }
 
-        if (room.guest) {
+        if (room.guest || room.clients.length >= ROOM_CAPACITY) {
           ws.send(JSON.stringify({ type: 'error', message: 'Room is already full.' }));
           return;
         }
 
         room.guest = normalizeUsername(message.username || 'Guest');
         room.guestSocket = ws;
+        room.guestReady = false;
         room.phase = 'ready';
         room.clients.push(ws);
         socketRooms.set(ws, room.code);
@@ -209,15 +221,17 @@ wss.on('connection', (ws) => {
           return;
         }
 
-        const requestedHost = normalizeUsername(message.username || '');
+        const requestedName = normalizeUsername(message.username || '');
+        const isHostSeat = requestedName === normalizeUsername(room.host) && room.hostSocket !== ws;
+        const isGuestSeat = requestedName === normalizeUsername(room.guest || '') && room.guestSocket !== ws;
 
         if (socketRooms.get(ws) === room.code) {
-          ws.send(JSON.stringify({ type: 'room_state', room: normalizeRoom(room), you: requestedHost === room.host ? 'host' : 'guest' }));
+          ws.send(JSON.stringify({ type: 'room_state', room: getRoomSnapshot(room), you: room.hostSocket === ws ? 'host' : 'guest' }));
           return;
         }
 
-        if (requestedHost === room.host && !room.hostSocket) {
-          room.host = requestedHost;
+        if (isHostSeat && !room.hostSocket) {
+          room.host = requestedName;
           room.hostSocket = ws;
           room.clients.push(ws);
           socketRooms.set(ws, room.code);
@@ -225,12 +239,18 @@ wss.on('connection', (ws) => {
           return;
         }
 
-        if (requestedHost === room.guest && !room.guestSocket) {
-          room.guest = requestedHost;
+        if (isGuestSeat && !room.guestSocket) {
+          room.guest = requestedName;
           room.guestSocket = ws;
           room.clients.push(ws);
           socketRooms.set(ws, room.code);
           broadcastRoom(room.code);
+          return;
+        }
+
+        if (room.hostSocket === ws || room.guestSocket === ws) {
+          socketRooms.set(ws, room.code);
+          ws.send(JSON.stringify({ type: 'room_state', room: getRoomSnapshot(room), you: room.hostSocket === ws ? 'host' : 'guest' }));
           return;
         }
 
@@ -249,10 +269,13 @@ wss.on('connection', (ws) => {
         if (room.hostSocket === ws) room.hostReady = Boolean(message.ready);
         if (room.guestSocket === ws) room.guestReady = Boolean(message.ready);
 
-        if (room.hostReady && room.guestReady && room.guest) {
+        if (room.guest && room.hostReady && room.guestReady) {
           room.phase = 'ready';
+        } else if (!room.guest || !room.hostReady || !room.guestReady) {
+          room.phase = 'waiting';
         }
 
+        ensureRoomState(room);
         broadcastRoom(roomCode);
         return;
       }
@@ -270,6 +293,10 @@ wss.on('connection', (ws) => {
         }
         if (!room.guest) {
           ws.send(JSON.stringify({ type: 'error', message: 'Waiting for a challenger.' }));
+          return;
+        }
+        if (!room.hostReady || !room.guestReady) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Both players must be ready before starting.' }));
           return;
         }
 

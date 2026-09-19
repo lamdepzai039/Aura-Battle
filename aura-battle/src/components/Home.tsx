@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { addMessage, getMessages, reactToMessage, type ChatChannel, type ChatMessage } from '../utils/chatStore';
 import { getGuildState } from '../utils/guildStore';
 import { DAILY_LOGIN_REWARDS, claimDailyReward, getDailyLoginState, getLoginDayIndex } from '../utils/dailyLogin';
-import { claimEventReward, getActiveEvent, getEventProgress } from '../utils/eventStore';
+import { claimEventReward, getActiveEvent, getEventCatalog, getEventProgressById } from '../utils/eventStore';
 import { ClickForAura } from './ClickForAura';
 import { MemeSticker } from './MemeSticker';
 import { getPlayerProfile } from '../utils/playerProfile';
@@ -37,14 +37,16 @@ export function Home({
   const [messages, setMessages] = useState<ChatMessage[]>(() => getMessages('GLOBAL'));
   const [chatNotice, setChatNotice] = useState('');
   const [claimNotice, setClaimNotice] = useState('');
-  const [eventState, setEventState] = useState(() => getActiveEvent(username));
+  const [eventCatalog, setEventCatalog] = useState(() => getEventCatalog(username));
+  const [selectedEventId, setSelectedEventId] = useState(() => getActiveEvent(username).id);
   const [clickAura, setClickAura] = useState(0);
   const [dailyState, setDailyState] = useState(() => getDailyLoginState());
   const [now, setNow] = useState(() => Date.now());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastSentAt = useRef(0);
 
-  const eventProgress = getEventProgress(username);
+  const eventState = eventCatalog.find((event) => event.id === selectedEventId) ?? eventCatalog[0] ?? getActiveEvent(username);
+  const eventProgress = getEventProgressById(username, eventState.id);
   const currentDay = getLoginDayIndex();
   const currentDayReward = DAILY_LOGIN_REWARDS.find((reward) => reward.day === currentDay);
   const loginClaimable = !dailyState.claimedDays.includes(currentDay) && currentDay > dailyState.lastClaimedDay;
@@ -82,8 +84,8 @@ export function Home({
   }
 
   function handleClaimEvent() {
-    const nextState = claimEventReward(username);
-    setEventState(nextState);
+    const nextState = claimEventReward(username, eventState.id);
+    setEventCatalog(getEventCatalog(username));
     setClaimNotice(nextState.claimed ? 'Event reward claimed!' : 'Complete every event task to claim.');
   }
 
@@ -154,6 +156,28 @@ export function Home({
                 <span>ENDS IN</span>
                 <strong>{Math.max(1, Math.ceil((new Date(eventState.endDate).getTime() - now) / (1000 * 60 * 60 * 24)))}D</strong>
               </div>
+            </div>
+
+            <div className="event-summary-grid" style={{ marginTop: '0.8rem' }}>
+              {eventCatalog.map((event) => (
+                <button
+                  key={event.id}
+                  type="button"
+                  onClick={() => setSelectedEventId(event.id)}
+                  style={{
+                    border: event.id === selectedEventId ? '1px solid rgba(45, 212, 191, 0.8)' : '1px solid rgba(255,255,255,0.08)',
+                    background: event.id === selectedEventId ? 'rgba(34, 211, 238, 0.08)' : 'rgba(15, 23, 42, 0.5)',
+                    color: '#e2f7ff',
+                    borderRadius: '999px',
+                    padding: '0.45rem 0.8rem',
+                    fontSize: '10px',
+                    letterSpacing: '0.18em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {event.kind}
+                </button>
+              ))}
             </div>
 
             <p className="event-description">{eventState.description}</p>

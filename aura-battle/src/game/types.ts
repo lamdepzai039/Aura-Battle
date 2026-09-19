@@ -108,7 +108,7 @@ export interface ChallengeFinalContext {
   durationMs: number;
 }
 
-export type GameMode = 'local' | 'ai' | 'online' | 'mutation';
+export type GameMode = 'local' | 'ai' | 'online' | 'mutation' | 'duo' | 'crew' | 'ranked';
 
 export type MutationArchetype = 'mobility' | 'stability' | 'volatility';
 

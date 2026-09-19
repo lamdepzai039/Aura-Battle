@@ -34,6 +34,35 @@ export function generateRoomCode() {
   return code;
 }
 
+export function createFallbackRoomState(host: string, guest: string | null = null, codeOverride?: string): OnlineRoomState {
+  const code = sanitizeRoomCode(codeOverride ?? generateRoomCode());
+  const room: OnlineRoomState = {
+    code,
+    host: host.trim() || 'PLAYER',
+    guest,
+    status: guest ? 'ready' : 'waiting',
+    phase: 'waiting',
+    createdAt: new Date().toISOString(),
+    hostReady: false,
+    guestReady: false,
+    startedAt: null,
+    matchSeed: null,
+  };
+
+  if (typeof localStorage !== 'undefined') {
+    const localRoom = {
+      code: room.code,
+      createdAt: room.createdAt,
+      host: room.host,
+      guest: room.guest,
+      status: room.status,
+    };
+    localStorage.setItem('aura-battle-private-room', JSON.stringify(localRoom));
+  }
+
+  return room;
+}
+
 export function sanitizeRoomCode(value: string) {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
 }

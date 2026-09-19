@@ -23,6 +23,8 @@ import { getSession, getSessionEmail } from './utils/auth';
 import { isAdminAccount } from './utils/playerProfile';
 import { addEventProgress } from './utils/eventStore';
 import { resolveLobbyUrl, type OnlineRoomState } from './utils/onlineRoom';
+import { applyMatchResult } from './utils/rankStore';
+import { awardMatchOutcome } from './utils/shopEconomy';
 import type { GameMode, MatchState, MutationLoadout, PlayerId } from './game/types';
 
 type AppPhase = 'login' | 'home' | 'shop' | 'guild' | 'settings' | 'mode_select' | 'camera_check' | 'player_setup' | 'mutation_map' | 'online_waiting' | 'battle' | 'leaderboard';
@@ -56,6 +58,17 @@ export default function App() {
 
       recordResult(match.players.p1.name, match.players.p1.aura);
       if (match.mode === 'local') recordResult(match.players.p2.name, match.players.p2.aura);
+
+      if (winner === 'tie') {
+        applyMatchResult(match.players.p1.name, match.players.p2.name, 'tie', match.mode);
+        awardMatchOutcome('tie', match.mode);
+      } else if (winner === 'p1') {
+        applyMatchResult(match.players.p1.name, match.players.p2.name, 'win', match.mode);
+        awardMatchOutcome('win', match.mode);
+      } else if (winner === 'p2') {
+        applyMatchResult(match.players.p1.name, match.players.p2.name, 'loss', match.mode);
+        awardMatchOutcome('loss', match.mode);
+      }
 
       addEventProgress(match.players.p1.name, {
         wins: playerOneWon ? 1 : 0,
@@ -217,7 +230,7 @@ export default function App() {
         setPlayerName('p1', hostName);
         setPlayerName('p2', rivalName);
         setPhase('battle');
-      }} className="rounded-full bg-cyan-400 px-7 py-3 font-display text-sm tracking-[0.2em] text-black hover:bg-cyan-300 transition disabled:opacity-50" disabled={!onlineLobby?.guest && onlineLobby?.phase !== 'playing'}>
+      }} className="rounded-full bg-cyan-400 px-7 py-3 font-display text-sm tracking-[0.2em] text-black hover:bg-cyan-300 transition disabled:opacity-50" disabled={false}>
         {onlineLobby?.isHost ? 'START BATTLE' : 'ENTER MATCH'}
       </button>
       <button onClick={() => setPhase('mode_select')} className="rounded-full border border-white/15 bg-white/5 px-6 py-3 font-display text-[10px] tracking-[0.24em] text-white/80 hover:bg-white/10 transition">BACK TO LOBBY</button>
