@@ -34,13 +34,49 @@ export interface WorldDefinition {
   biomes: Record<string, { label: string; color: string }>;
 }
 
+export type InventoryResource = 'wood' | 'stone' | 'ore' | 'crystal' | 'auraShard' | 'aura_pickaxe';
+
 export interface InventoryState {
   wood: number;
   stone: number;
   ore: number;
   crystal: number;
   auraShard: number;
+  aura_pickaxe: number;
 }
+
+export const INVENTORY_KEYS: InventoryResource[] = ['wood', 'stone', 'ore', 'crystal', 'auraShard', 'aura_pickaxe'];
+
+export interface SandboxSavePayload {
+  version: number;
+  savedAt: number;
+  world: WorldDefinition;
+  player: PlayerState;
+  inventory: InventoryState;
+  selectedSlot: number;
+  biome: BiomeType;
+  activeEvent: string;
+  eventLog: string[];
+  enemies: EnemyState[];
+  loot: LootDrop[];
+}
+
+export const SANDBOX_SAVE_KEY = 'aura-battle-sandbox-save-v1';
+
+export const CRAFTING_RECIPES: Record<string, { result: string; ingredients: Record<string, number>; label: string; description: string }> = {
+  aura_pickaxe: {
+    result: 'aura_pickaxe',
+    ingredients: { stone: 8, ore: 3, auraShard: 2 },
+    label: 'AURA PICKAXE',
+    description: 'A refined mining tool tuned for deep extraction.',
+  },
+  aura_battery: {
+    result: 'aura_battery',
+    ingredients: { crystal: 4, auraShard: 2 },
+    label: 'AURA BATTERY',
+    description: 'Stores a burst of unstable power for stronger mutations.',
+  },
+};
 
 export interface MutationSpec {
   id: string;
@@ -315,6 +351,100 @@ export function getChunkAround(world: WorldDefinition, worldX: number, worldY: n
   return matches;
 }
 
+function normalizeInventory(raw: Partial<InventoryState> | undefined): InventoryState {
+  return {
+    wood: Number(raw?.wood ?? 0),
+    stone: Number(raw?.stone ?? 0),
+    ore: Number(raw?.ore ?? 0),
+    crystal: Number(raw?.crystal ?? 0),
+    auraShard: Number(raw?.auraShard ?? 0),
+    aura_pickaxe: Number(raw?.aura_pickaxe ?? 0),
+  };
+}
+
+export function saveSandboxState(state: SandboxState): SandboxSavePayload {
+  return {
+    version: 1,
+    savedAt: Date.now(),
+    world: state.world,
+    player: { ...state.player },
+    inventory: normalizeInventory(state.inventory),
+    selectedSlot: state.selectedSlot,
+    biome: state.biome,
+    activeEvent: state.activeEvent,
+    eventLog: [...state.eventLog],
+    enemies: state.enemies.map((enemy) => ({ ...enemy })),
+    loot: state.loot.map((drop) => ({ ...drop })),
+  };
+}
+
+export function loadSandboxState(raw: string | null): SandboxState | null {
+  if (!raw) return null;
+
+  try {
+    const payload = JSON.parse(raw) as Partial<SandboxSavePayload>;
+    if (!payload || typeof payload !== 'object') return null;
+    const fallback = createSandboxState({ seed: payload.world?.seed ?? 928173, playerName: payload.player?.name ?? 'Aster' });
+
+    const world = payload.world ?? fallback.world;
+    const player = { ...fallback.player, ...payload.player };
+    const inventory = normalizeInventory(payload.inventory ?? fallback.inventory);
+    const state: SandboxState = {
+      world,
+      player,
+      inventory,
+      selectedSlot: Number(payload.selectedSlot ?? 0),
+      biome: payload.biome ?? fallback.biome,
+      activeEvent: payload.activeEvent ?? fallback.activeEvent,
+      eventLog: Array.isArray(payload.eventLog) ? payload.eventLog : fallback.eventLog,
+      enemies: Array.isArray(payload.enemies) ? payload.enemies : fallback.enemies,
+      loot: Array.isArray(payload.loot) ? payload.loot : fallback.loot,
+    };
+
+    return state;
+  } catch {
+    return null;
+  }
+}
+
+export function hasRecipeMaterials(inventory: InventoryState, recipe: { ingredients: Record<string, number> }): boolean {
+  return Object.entries(recipe.ingredients).every(([resource, amount]) => {
+    const key = resource as keyof InventoryState;
+    return Number(inventory[key] ?? 0) >= Number(amount ?? 0);
+  });
+}
+
+export function craftItem(state: SandboxState, itemId: string): SandboxState {
+  const recipe = CRAFTING_RECIPES[itemId];
+  if (!recipe) {
+    return {
+      ...state,
+      eventLog: [...state.eventLog, `No recipe exists for ${itemId}.`],
+    };
+  }
+
+  if (!hasRecipeMaterials(state.inventory, recipe)) {
+    return {
+      ...state,
+      eventLog: [...state.eventLog, `Missing materials for ${recipe.label}.`],
+    };
+  }
+
+  const nextInventory = { ...state.inventory };
+  Object.entries(recipe.ingredients).forEach(([resource, amount]) => {
+    const key = resource as keyof InventoryState;
+    nextInventory[key] = Number(nextInventory[key] ?? 0) - Number(amount ?? 0);
+  });
+
+  nextInventory[itemId as keyof InventoryState] = Number(nextInventory[itemId as keyof InventoryState] ?? 0) + 1;
+
+  return {
+    ...state,
+    inventory: nextInventory,
+    eventLog: [...state.eventLog, `${recipe.label} crafted. ${recipe.description}`],
+  };
+}
+
 export function createSandboxState(options: { seed?: number; playerName?: string; width?: number; height?: number }): SandboxState {
   const seed = options.seed ?? 928173;
   const world = createWorld({ seed, width: options.width ?? 160, height: options.height ?? 64, chunkSize: 16 });
@@ -358,11 +488,12 @@ export function createSandboxState(options: { seed?: number; playerName?: string
       ore: 0,
       crystal: 0,
       auraShard: 0,
+      aura_pickaxe: 0,
     },
-    selectedSlot: 1,
+    selectedSlot: 0,
     biome: 'aura_forest',
     activeEvent: 'LOCK IN',
-    eventLog: ['World generated with seed 928173.', 'AURA FOREST scanned.'],
+    eventLog: [`World generated with seed ${seed}.`, 'AURA FOREST scanned.'],
     enemies,
     loot,
   };

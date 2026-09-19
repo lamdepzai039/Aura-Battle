@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   collectNearbyLoot,
+  craftItem,
   createSandboxState,
   createWorld,
+  loadSandboxState,
   mineTile,
+  saveSandboxState,
   updateEnemyState,
   useMutation,
 } from './auraMutationSandbox';
@@ -53,5 +56,36 @@ describe('Aura Mutation sandbox foundation', () => {
     });
 
     expect(lootState.inventory.ore >= 0 || lootState.inventory.crystal >= 0 || lootState.inventory.auraShard >= 0).toBe(true);
+  });
+
+  it('persists the world and inventory in a versioned local save schema', () => {
+    const state = createSandboxState({ seed: 101, playerName: 'Aster' });
+    state.inventory.stone = 14;
+    state.inventory.crystal = 2;
+    state.player.x = 32;
+    state.player.energy = 60;
+
+    const payload = saveSandboxState(state);
+    expect(payload.version).toBe(1);
+    expect(payload.world.seed).toBe(101);
+    expect(payload.inventory.stone).toBe(14);
+
+    const restored = loadSandboxState(JSON.stringify(payload));
+    expect(restored).not.toBeNull();
+    expect(restored?.player.x).toBe(32);
+    expect(restored?.inventory.crystal).toBe(2);
+  });
+
+  it('crafts a basic aura tool when the required materials are available', () => {
+    const state = createSandboxState({ seed: 7, playerName: 'Aster' });
+    state.inventory.stone = 12;
+    state.inventory.ore = 4;
+    state.inventory.auraShard = 3;
+
+    const next = craftItem(state, 'aura_pickaxe');
+
+    expect(next.inventory.aura_pickaxe).toBeGreaterThan(0);
+    expect(next.inventory.stone).toBeLessThan(12);
+    expect(next.inventory.ore).toBeLessThan(4);
   });
 });

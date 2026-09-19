@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createMutationArenaState, stepMutationArena } from '../game/auraMutationArena';
-import { collectNearbyLoot, createSandboxState, getBiomeFor, mineTile, updateEnemyState } from '../game/auraMutationSandbox';
+import { CRAFTING_RECIPES, INVENTORY_KEYS, SANDBOX_SAVE_KEY, collectNearbyLoot, craftItem, createSandboxState, getBiomeFor, hasRecipeMaterials, loadSandboxState, mineTile, saveSandboxState, updateEnemyState } from '../game/auraMutationSandbox';
 import type { MutationLoadout } from '../game/types';
 
 const TILE_SIZE = 20;
@@ -26,10 +26,23 @@ export function MutationMap({ playerName, rivalName, loadout, skinId = 'skin-1',
       trendPack: loadout.trendPack,
     },
   }));
-  const [sandboxState, setSandboxState] = useState(() => createSandboxState({ seed: 928173, playerName }));
+  const [sandboxState, setSandboxState] = useState(() => {
+    if (typeof window === 'undefined') {
+      return createSandboxState({ seed: 928173, playerName });
+    }
+
+    const saved = loadSandboxState(window.localStorage.getItem(SANDBOX_SAVE_KEY));
+    return saved ?? createSandboxState({ seed: 928173, playerName });
+  });
   const pressedKeys = useRef(new Set<string>());
   const triggerMutationRef = useRef(false);
   const mineRequestRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(SANDBOX_SAVE_KEY, JSON.stringify(saveSandboxState(sandboxState)));
+    }
+  }, [sandboxState]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -41,6 +54,9 @@ export function MutationMap({ playerName, rivalName, loadout, skinId = 'skin-1',
       }
       if (key === 'e' || key === 'f') {
         mineRequestRef.current = true;
+      }
+      if (/^[1-5]$/.test(key)) {
+        setSandboxState((current) => ({ ...current, selectedSlot: Number(key) - 1 }));
       }
     }
 
@@ -168,7 +184,18 @@ export function MutationMap({ playerName, rivalName, loadout, skinId = 'skin-1',
     mineRequestRef.current = true;
   }
 
+  function selectHotbar(slot: number) {
+    setSandboxState((current) => ({ ...current, selectedSlot: slot }));
+  }
+
+  function handleCraftPickaxe() {
+    setSandboxState((current) => craftItem(current, 'aura_pickaxe'));
+  }
+
   const progress = Math.min(100, Math.max(0, Math.round(arena.objective.progress)));
+  const hotbarKeys = ['stone', 'ore', 'crystal', 'auraShard', 'aura_pickaxe'];
+  const hotbarRecipe = CRAFTING_RECIPES.aura_pickaxe;
+  const canCraftPickaxe = hasRecipeMaterials(sandboxState.inventory, hotbarRecipe);
   const mutationLabel = loadout.mutationId.toUpperCase().replace(/-/g, ' ');
   const archetypeClass = loadout.archetype.toLowerCase();
   const objectiveText = arena.objective.owner === 'player' ? 'YOU HOLD THE CORE' : arena.objective.owner === 'rival' ? 'RIVAL HOLDS THE CORE' : 'CORE CONTESTED';
@@ -355,8 +382,55 @@ export function MutationMap({ playerName, rivalName, loadout, skinId = 'skin-1',
             <div style={{ marginTop: '4px', fontSize: '10px', color: '#a7daf8' }}>INV: {sandboxState.inventory.wood} wood / {sandboxState.inventory.stone} stone / {sandboxState.inventory.ore} ore</div>
           </div>
 
+          <div className="mutation-note-panel" style={{ marginTop: '12px', padding: '12px', borderRadius: '10px', background: 'rgba(20, 30, 48, 0.78)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div style={{ fontSize: '8px', letterSpacing: '0.14em', textTransform: 'uppercase', color: '#8ab4df' }}>INVENTORY</div>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+              {hotbarKeys.map((itemKey, index) => (
+                <button key={itemKey} type="button" onClick={() => selectHotbar(index)} style={{
+                  minWidth: '56px',
+                  borderRadius: '8px',
+                  border: index === sandboxState.selectedSlot ? '1px solid rgba(110, 231, 183, 0.8)' : '1px solid rgba(255,255,255,0.1)',
+                  background: index === sandboxState.selectedSlot ? 'rgba(16, 185, 129, 0.18)' : 'rgba(15, 23, 42, 0.72)',
+                  color: '#ebf7ff',
+                  padding: '6px 8px',
+                  fontSize: '9px',
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                }}>
+                  <div>{itemKey === 'aura_pickaxe' ? 'PICK' : itemKey === 'auraShard' ? 'AURA' : itemKey.toUpperCase()}</div>
+                  <strong style={{ display: 'block', marginTop: '4px', fontSize: '10px' }}>{sandboxState.inventory[itemKey as keyof typeof sandboxState.inventory] ?? 0}</strong>
+                </button>
+              ))}
+            </div>
+            <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
+              {INVENTORY_KEYS.map((itemKey) => (
+                <div key={itemKey} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', borderRadius: '7px', background: 'rgba(15, 23, 42, 0.6)', padding: '6px 8px', fontSize: '9px', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#d9ebff' }}>
+                  <span>{itemKey === 'aura_pickaxe' ? 'pickaxe' : itemKey === 'auraShard' ? 'aura' : itemKey}</span>
+                  <strong>{sandboxState.inventory[itemKey] ?? 0}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mutation-note-panel" style={{ marginTop: '12px', padding: '12px', borderRadius: '10px', background: 'rgba(14, 28, 41, 0.8)', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+            <div style={{ fontSize: '8px', letterSpacing: '0.14em', textTransform: 'uppercase', color: '#8ab4df' }}>CRAFTING</div>
+            <div style={{ marginTop: '8px', fontSize: '12px', fontWeight: 700, color: '#ebf7ff' }}>{hotbarRecipe.label}</div>
+            <div style={{ marginTop: '4px', fontSize: '9px', color: '#bfdbfe' }}>{hotbarRecipe.description}</div>
+            <div style={{ marginTop: '8px', fontSize: '9px', color: '#d9ebff' }}>
+              {Object.entries(hotbarRecipe.ingredients).map(([resource, amount]) => (
+                <div key={resource} style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+                  <span>{resource === 'auraShard' ? 'aura' : resource}</span>
+                  <strong>{amount}</strong>
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={handleCraftPickaxe} disabled={!canCraftPickaxe} style={{ marginTop: '10px', width: '100%', borderRadius: '999px', border: '1px solid rgba(96, 165, 250, 0.7)', background: canCraftPickaxe ? 'rgba(59, 130, 246, 0.22)' : 'rgba(15, 23, 42, 0.4)', color: canCraftPickaxe ? '#e0f2fe' : '#7dd3fc', padding: '8px 10px', fontSize: '9px', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+              {canCraftPickaxe ? 'Craft Aura Pickaxe' : 'Need Materials'}
+            </button>
+          </div>
+
           <div className="mutation-notice" role="status">{arena.message}</div>
-          <p className="mutation-controls-hint">MOVE WITH WASD OR ARROW KEYS. PRESS SPACE FOR MUTATION BURST. HOLD SHIFT/X/Z TO DASH. PRESS E/F TO MINE.</p>
+          <p className="mutation-controls-hint">MOVE WITH WASD OR ARROW KEYS. PRESS SPACE FOR MUTATION BURST. HOLD SHIFT/X/Z TO DASH. PRESS E/F TO MINE. USE 1-5 TO SELECT HOTBAR.</p>
         </aside>
       </section>
     </main>
