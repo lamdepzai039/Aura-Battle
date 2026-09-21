@@ -644,8 +644,19 @@ body {
 
 .event-modal {
   width: min(92vw, 560px);
+  max-height: 90vh;
+  overflow-y: auto;
   border-radius: 28px;
   padding: 22px 20px 18px;
+}
+
+.event-modal::-webkit-scrollbar {
+  width: 8px;
+}
+
+.event-modal::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .event-modal-header {

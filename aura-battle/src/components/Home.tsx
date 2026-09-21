@@ -194,6 +194,15 @@ export function Home({
 
             <p className="event-description">{eventState.description}</p>
 
+            <form className="event-code-form" onSubmit={handleRedeemEventCode}>
+              <label htmlFor="event-code-input">ENTER EVENT CODE</label>
+              <div className="event-code-row">
+                <input id="event-code-input" value={eventCode} onChange={(event) => setEventCode(event.target.value.toUpperCase())} maxLength={20} placeholder="WELCOME" aria-label="Enter event code" />
+                <button type="submit" className="event-code-button">REDEEM</button>
+              </div>
+              {eventCodeNotice && <small className="event-code-status">{eventCodeNotice}</small>}
+            </form>
+
             <ClickForAura aura={clickAura} onAuraEarned={() => setClickAura((value) => value + 1)} />
 
             <div className="event-progress-bar">
@@ -220,15 +229,6 @@ export function Home({
               <span className="eyebrow">REWARDS</span>
               <div className="reward-chips">{eventState.totalRewards.map((reward) => <span key={reward}>{reward}</span>)}</div>
             </div>
-
-            <form className="event-code-form" onSubmit={handleRedeemEventCode}>
-              <label htmlFor="event-code-input">ENTER EVENT CODE</label>
-              <div className="event-code-row">
-                <input id="event-code-input" value={eventCode} onChange={(event) => setEventCode(event.target.value.toUpperCase())} maxLength={20} placeholder="WELCOME" aria-label="Enter event code" />
-                <button type="submit" className="event-code-button">REDEEM</button>
-              </div>
-              {eventCodeNotice && <small className="event-code-status">{eventCodeNotice}</small>}
-            </form>
 
             <button className="event-claim-button" onClick={handleClaimEvent} disabled={eventState.claimed || eventProgress < 100}>
               {eventState.claimed ? 'CLAIMED' : eventProgress >= 100 ? 'CLAIM REWARD' : 'KEEP PUSHING'}
