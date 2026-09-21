@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { addMessage, getMessages, reactToMessage, type ChatChannel, type ChatMessage } from '../utils/chatStore';
 import { getGuildState } from '../utils/guildStore';
 import { DAILY_LOGIN_REWARDS, claimDailyReward, getDailyLoginState, getLoginDayIndex } from '../utils/dailyLogin';
-import { claimEventReward, getActiveEvent, getEventCatalog, getEventProgressById } from '../utils/eventStore';
+import { claimEventReward, getActiveEvent, getEventCatalog, getEventProgressById, redeemEventCode } from '../utils/eventStore';
 import { ClickForAura } from './ClickForAura';
 import { MemeSticker } from './MemeSticker';
 import { getPlayerProfile } from '../utils/playerProfile';
@@ -34,6 +34,8 @@ export function Home({
   const [socialPanel, setSocialPanel] = useState<'friends' | 'mail' | null>(null);
   const [eventOpen, setEventOpen] = useState(false);
   const [questOpen, setQuestOpen] = useState(false);
+  const [eventCode, setEventCode] = useState('');
+  const [eventCodeNotice, setEventCodeNotice] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>(() => getMessages('GLOBAL'));
   const [chatNotice, setChatNotice] = useState('');
   const [claimNotice, setClaimNotice] = useState('');
@@ -87,6 +89,16 @@ export function Home({
     const nextState = claimEventReward(username, eventState.id);
     setEventCatalog(getEventCatalog(username));
     setClaimNotice(nextState.claimed ? 'Event reward claimed!' : 'Complete every event task to claim.');
+  }
+
+  function handleRedeemEventCode(event: FormEvent) {
+    event.preventDefault();
+    const result = redeemEventCode(username, eventCode);
+    setEventCodeNotice(result.message);
+    if (result.success) {
+      setEventCode('');
+      setClaimNotice(`Code redeemed: ${result.reward}`);
+    }
   }
 
   function handleClaimDaily() {
@@ -208,6 +220,15 @@ export function Home({
               <span className="eyebrow">REWARDS</span>
               <div className="reward-chips">{eventState.totalRewards.map((reward) => <span key={reward}>{reward}</span>)}</div>
             </div>
+
+            <form className="event-code-form" onSubmit={handleRedeemEventCode}>
+              <label htmlFor="event-code-input">ENTER EVENT CODE</label>
+              <div className="event-code-row">
+                <input id="event-code-input" value={eventCode} onChange={(event) => setEventCode(event.target.value.toUpperCase())} maxLength={20} placeholder="WELCOME" aria-label="Enter event code" />
+                <button type="submit" className="event-code-button">REDEEM</button>
+              </div>
+              {eventCodeNotice && <small className="event-code-status">{eventCodeNotice}</small>}
+            </form>
 
             <button className="event-claim-button" onClick={handleClaimEvent} disabled={eventState.claimed || eventProgress < 100}>
               {eventState.claimed ? 'CLAIMED' : eventProgress >= 100 ? 'CLAIM REWARD' : 'KEEP PUSHING'}

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { RANDOM_QUEST_POOL, getActiveEvent, getEventCatalog } from './eventStore';
+import { RANDOM_QUEST_POOL, getActiveEvent, getEventCatalog, redeemEventCode } from './eventStore';
 
 const makeStorage = () => {
   const store = new Map<string, string>();
@@ -45,5 +45,15 @@ describe('quest board generation', () => {
     expect(catalog.every((event) => event.tasks.length >= 3)).toBe(true);
     expect(catalog.some((event) => event.title.toLowerCase().includes('rush'))).toBe(true);
     expect(catalog.some((event) => event.title.toLowerCase().includes('mutation'))).toBe(true);
+  });
+
+  it('accepts the WELCOME code once per player and rewards the wallet', () => {
+    const first = redeemEventCode('alice', 'WELCOME');
+    const second = redeemEventCode('alice', 'WELCOME');
+
+    expect(first.success).toBe(true);
+    expect(first.reward).toBe('200 Coins');
+    expect(second.success).toBe(false);
+    expect(second.message).toMatch(/already redeemed|used/i);
   });
 });

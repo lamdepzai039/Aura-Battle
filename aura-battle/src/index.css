@@ -749,6 +749,56 @@ body {
   margin-top: 10px;
 }
 
+.event-code-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.event-code-form label {
+  color: var(--text-soft);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+}
+
+.event-code-row {
+  display: flex;
+  gap: 8px;
+}
+
+.event-code-row input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid rgba(240, 216, 157, 0.9);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(17, 24, 39, 0.55);
+  color: #f3f9ff;
+  font: inherit;
+}
+
+.event-code-row input::placeholder {
+  color: rgba(195, 222, 245, 0.6);
+}
+
+.event-code-button {
+  border: 1px solid rgba(95, 234, 173, 0.7);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(95, 234, 173, 0.12);
+  color: #d9fff0;
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+.event-code-status {
+  display: block;
+  color: #ffd66b;
+  font-size: 10px;
+}
+
 .event-claim-button {
   width: 100%;
   margin-top: 18px;

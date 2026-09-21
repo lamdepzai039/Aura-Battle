@@ -23,8 +23,13 @@ export type EventState = {
 };
 
 const EVENT_KEY = 'aura-battle-event-catalog-v2';
+const EVENT_CODE_KEY = 'aura-battle-event-codes-v1';
 const QUEST_COUNT = 30;
 const QUEST_PICK_COUNT = 5;
+
+const EVENT_CODE_REWARDS: Record<string, { code: string; reward: string }> = {
+  WELCOME: { code: 'WELCOME', reward: '200 Coins' },
+};
 
 export const RANDOM_QUEST_POOL: EventTask[] = [
   { id: 'q-01', title: 'Win 1 match', goal: 1, progress: 0, reward: '100 Coins' },
@@ -201,6 +206,52 @@ function writeEventState(playerId: string, state: EventState) {
   } catch {
     // ignore unsupported storage access in restricted contexts
   }
+}
+
+function readRedeemedEventCodes(playerId: string): string[] {
+  try {
+    const raw = localStorage.getItem(`${EVENT_CODE_KEY}-${resolvePlayerKey(playerId)}`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as string[];
+    return Array.isArray(parsed) ? parsed.map((code) => String(code).toUpperCase()) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeRedeemedEventCodes(playerId: string, codes: string[]) {
+  try {
+    localStorage.setItem(`${EVENT_CODE_KEY}-${resolvePlayerKey(playerId)}`, JSON.stringify(codes));
+  } catch {
+    // ignore unsupported storage access in restricted contexts
+  }
+}
+
+export function redeemEventCode(playerId = 'guest', code = ''): { success: boolean; reward?: string; message: string } {
+  const normalizedCode = String(code ?? '').trim().toUpperCase();
+  if (!normalizedCode) {
+    return { success: false, message: 'Enter an event code to redeem.' };
+  }
+
+  const rewardConfig = EVENT_CODE_REWARDS[normalizedCode];
+  if (!rewardConfig) {
+    return { success: false, message: 'This code is invalid or expired.' };
+  }
+
+  const redeemed = readRedeemedEventCodes(playerId);
+  if (redeemed.includes(normalizedCode)) {
+    return { success: false, message: `Code ${normalizedCode} already redeemed.` };
+  }
+
+  awardRewardText(rewardConfig.reward);
+  const nextRedeemed = [...redeemed, normalizedCode];
+  writeRedeemedEventCodes(playerId, nextRedeemed);
+
+  return {
+    success: true,
+    reward: rewardConfig.reward,
+    message: `Code ${normalizedCode} activated! Reward: ${rewardConfig.reward}`,
+  };
 }
 
 function getEventById(playerId: string, eventId?: string): EventState {
