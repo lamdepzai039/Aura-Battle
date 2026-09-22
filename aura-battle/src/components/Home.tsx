@@ -28,6 +28,16 @@ export function Home({
 }) {
   const profile = getPlayerProfile(username);
   const DISCORD_URL = import.meta.env.VITE_DISCORD_URL || 'https://discord.com/channels/1551945989651439648/1551945990800412694';
+  const DISCORD_ICON = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Discord">
+      <circle cx="64" cy="64" r="64" fill="#5865F2"/>
+      <circle cx="46" cy="55" r="6" fill="#FFFFFF"/>
+      <circle cx="82" cy="55" r="6" fill="#FFFFFF"/>
+      <path d="M42 82c8 9 18 13 22 13s14-4 22-13l5 20c-10 10-22 15-27 15s-17-5-27-15l5-20Z" fill="#FFFFFF"/>
+      <path d="M41 79c4-5 10-8 14-10l4 9c-6 1-11 4-18 11l0-10Z" fill="#FFFFFF" opacity="0.92"/>
+      <path d="M87 79c-4-5-10-8-14-10l-4 9c6 1 11 4 18 11l0-10Z" fill="#FFFFFF" opacity="0.92"/>
+    </svg>
+  `)}`;
   const [chatOpen, setChatOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [activeChat, setActiveChat] = useState('GLOBAL');
@@ -141,7 +151,7 @@ export function Home({
             </button>
           </div>
           <a className="icon-action" href={DISCORD_URL} target="_blank" rel="noreferrer" aria-label="Open Discord community">
-            <span>◌</span>
+            <img src={DISCORD_ICON} alt="Discord" style={{ width: '18px', height: '18px', objectFit: 'contain', display: 'block' }} />
             <small>DISCORD</small>
           </a>
           <button className="icon-action" aria-label="Open mail" onClick={() => setSocialPanel('mail')}><span>✉</span><small>INBOX</small></button>
