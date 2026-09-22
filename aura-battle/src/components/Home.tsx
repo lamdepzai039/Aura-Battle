@@ -27,6 +27,7 @@ export function Home({
   onSettings: () => void;
 }) {
   const profile = getPlayerProfile(username);
+  const DISCORD_URL = import.meta.env.VITE_DISCORD_URL || 'https://discord.com/channels/1551945989651439648/1551945990800412694';
   const [chatOpen, setChatOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [activeChat, setActiveChat] = useState('GLOBAL');
@@ -139,6 +140,10 @@ export function Home({
               <small>QUEST</small>
             </button>
           </div>
+          <a className="icon-action" href={DISCORD_URL} target="_blank" rel="noreferrer" aria-label="Open Discord community">
+            <span>◌</span>
+            <small>DISCORD</small>
+          </a>
           <button className="icon-action" aria-label="Open mail" onClick={() => setSocialPanel('mail')}><span>✉</span><small>INBOX</small></button>
         </div>
       </header>
