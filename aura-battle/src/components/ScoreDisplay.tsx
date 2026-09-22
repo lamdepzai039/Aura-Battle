@@ -6,15 +6,18 @@ export function ScoreDisplay({
   aura,
   feedback,
   align,
+  label,
 }: {
   playerName: string;
   aura: number;
   feedback: LivePlayerFeedback;
   align: 'left' | 'right';
+  label?: string;
 }) {
   return (
     <div className={`absolute top-3 ${align === 'left' ? 'left-3' : 'right-3'} z-20 flex flex-col ${align === 'left' ? 'items-start' : 'items-end'}`}>
       <div className="px-3 py-1 rounded-full bg-black/50 backdrop-blur border border-white/10">
+        <span className="mr-2 font-display text-[10px] tracking-[0.2em] text-cyan-200/80 uppercase">{label ?? (align === 'left' ? 'P1' : 'P2')}</span>
         <span className="font-display text-xs tracking-wider text-white/80">{playerName}</span>
         <span className="ml-2 font-display text-sm" style={{ color: 'var(--aura-gold)' }}>
           {aura}

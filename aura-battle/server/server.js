@@ -309,6 +309,41 @@ wss.on('connection', (ws) => {
         return;
       }
 
+      if (message.type === 'webrtc_signal') {
+        const roomCode = socketRooms.get(ws);
+        const room = roomCode ? rooms.get(roomCode) : null;
+        if (!room) {
+          ws.send(JSON.stringify({ type: 'error', message: 'No room for this client.' }));
+          return;
+        }
+        const senderRole = room.hostSocket === ws ? 'host' : room.guestSocket === ws ? 'guest' : null;
+        if (!senderRole) {
+          ws.send(JSON.stringify({ type: 'error', message: 'You are not part of this room.' }));
+          return;
+        }
+        const targetSocket = message.target === 'host' ? room.hostSocket : room.guestSocket;
+        if (!targetSocket || targetSocket === ws) {
+          console.warn('[AuraBattle][Server] peer signal rejected', { roomCode, senderRole, target: message.target, reason: 'Peer is not connected yet.' });
+          ws.send(JSON.stringify({ type: 'error', message: 'Peer is not connected yet.' }));
+          return;
+        }
+
+        console.info('[AuraBattle][Server] forwarding signal', {
+          roomCode,
+          from: senderRole,
+          to: message.target,
+          signalType: message.signal?.type,
+        });
+        targetSocket.send(JSON.stringify({
+          type: 'webrtc_signal',
+          from: senderRole,
+          to: message.target,
+          signal: message.signal,
+          roomCode,
+        }));
+        return;
+      }
+
       if (message.type === 'leave_room') {
         leaveRoom(ws);
         return;
