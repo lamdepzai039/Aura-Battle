@@ -359,7 +359,7 @@ export default function App() {
         }
 
         if (payload.type === 'error' && payload.message) {
-          setPhase('mode_select');
+          console.error('[AuraBattle][Lobby] rejoin error after match found', payload.message);
         }
       } catch {
         // ignore malformed lobby messages
