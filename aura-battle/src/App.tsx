@@ -419,9 +419,9 @@ export default function App() {
 
   if (phase === 'online_waiting') return <div className="fixed inset-0 flex flex-col items-center justify-center px-6 gap-6 bg-[#050816]">
     <div className="text-center space-y-4">
-      <p className="font-display text-[10px] tracking-[0.32em] text-cyan-300/80">ONLINE ROOM STATUS</p>
-      <h1 className="font-display text-4xl tracking-[0.18em] text-white">ROOM {onlineLobby?.roomCode ?? '---'}</h1>
-      <p className="text-sm text-white/70">{onlineLobby?.guest ? `${onlineLobby.host} vs ${onlineLobby.guest}` : `Host: ${onlineLobby?.host ?? username} · Waiting for challenger`}</p>
+      <p className="font-display text-[10px] tracking-[0.32em] text-cyan-300/80">{onlineLobby?.phase === 'playing' ? 'MATCH FOUND' : 'ONLINE ROOM STATUS'}</p>
+      <h1 className="font-display text-4xl tracking-[0.18em] text-white">{onlineLobby?.phase === 'playing' ? 'MATCH FOUND' : `ROOM ${onlineLobby?.roomCode ?? '---'}`}</h1>
+      <p className="text-sm text-white/70">{onlineLobby?.phase === 'playing' ? `${onlineLobby.format.toUpperCase()} · ${onlineLobby.players.length}/${onlineLobby.maxPlayers} PLAYERS READY` : onlineLobby?.guest ? `${onlineLobby.host} vs ${onlineLobby.guest}` : `Host: ${onlineLobby?.host ?? username} · Waiting for challenger`}</p>
       <div className="flex items-center justify-center gap-3 text-[10px] tracking-[0.25em] text-white/60">
         <span className={`rounded-full border px-3 py-1 ${onlineLobby?.phase === 'playing' ? 'border-emerald-400 text-emerald-300' : onlineLobby?.guest ? 'border-cyan-400 text-cyan-300' : 'border-yellow-400 text-yellow-300'}`}>
           {onlineLobby?.phase === 'playing' ? 'LIVE' : onlineLobby?.guest ? 'READY' : 'WAITING'}
@@ -437,7 +437,7 @@ export default function App() {
       <div className="my-4 h-px bg-white/10" />
       <div className="flex items-center justify-between text-xs uppercase tracking-[0.22em] text-white/60">
         <span>RIVAL</span>
-        <span>{onlineLobby?.guest ?? 'WAITING...'}</span>
+        <span>{onlineLobby?.phase === 'playing' ? onlineLobby.players.map((player) => player.name).join(' · ') : onlineLobby?.guest ?? 'WAITING...'}</span>
       </div>
     </div>
 
@@ -449,12 +449,12 @@ export default function App() {
           guest: onlineLobby?.guest ?? 'RIVAL',
           isHost: onlineLobby?.isHost ?? true,
         });
-        startMatch('online');
+        startMatch('online', undefined, undefined, Date.now());
         setPlayerName('p1', battleNames.p1);
         setPlayerName('p2', battleNames.p2);
-        setPhase('battle');
+        setPhase(onlineLobby?.phase === 'playing' ? 'camera_check' : 'battle');
       }} className="rounded-full bg-cyan-400 px-7 py-3 font-display text-sm tracking-[0.2em] text-black hover:bg-cyan-300 transition disabled:opacity-50" disabled={false}>
-        {onlineLobby?.isHost ? 'START BATTLE' : 'ENTER MATCH'}
+        {onlineLobby?.phase === 'playing' ? 'ENTER ONLINE MATCH' : onlineLobby?.isHost ? 'START BATTLE' : 'ENTER MATCH'}
       </button>
       <button onClick={() => setPhase('mode_select')} className="rounded-full border border-white/15 bg-white/5 px-6 py-3 font-display text-[10px] tracking-[0.24em] text-white/80 hover:bg-white/10 transition">BACK TO LOBBY</button>
     </div>

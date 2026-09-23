@@ -16,9 +16,18 @@ type OnlineBattleContext = {
   players: OnlineRoomState['players'];
 };
 
+function formatQueueTime(milliseconds: number) {
+  const totalSeconds = Math.floor(milliseconds / 1000);
+  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+  const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+  return `${minutes}:${seconds}`;
+}
+
 export function PlayMode({ username, onSelect, onBack }: { username?: string; onSelect: (mode: GameMode, onlineContext?: OnlineBattleContext) => void; onBack: () => void }) {
   const [mode, setMode] = useState<QueueMode>('1V1');
   const [roomFormat, setRoomFormat] = useState<RoomFormat>('1v1');
+  const [queueFormat, setQueueFormat] = useState<RoomFormat | null>(null);
+  const [queueElapsedSeconds, setQueueElapsedSeconds] = useState(0);
   const [roomCode, setRoomCode] = useState(() => {
     if (typeof window === 'undefined') return '';
     const params = new URLSearchParams(window.location.search);
@@ -32,6 +41,7 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
   const [isHost, setIsHost] = useState(false);
   const [selfReady, setSelfReady] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
+  const queueSocketRef = useRef<WebSocket | null>(null);
   const playerName = username || 'PLAYER';
 
   function showNotice(message: string) {
@@ -180,6 +190,54 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
   }, [mode, onSelect, playerName]);
 
   useEffect(() => {
+    if (!queueFormat) return undefined;
+    const timer = window.setInterval(() => setQueueElapsedSeconds((seconds) => seconds + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [queueFormat]);
+
+  useEffect(() => {
+    if (!queueFormat) return undefined;
+    const socket = new WebSocket(resolveLobbyUrl(window.location.href));
+    queueSocketRef.current = socket;
+    socket.onopen = () => {
+      socket.send(JSON.stringify({ type: 'queue_match', format: queueFormat, username: playerName }));
+    };
+    socket.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as { type?: string; format?: RoomFormat; position?: number; room?: OnlineRoomState; message?: string };
+        if (payload.type === 'queue_joined') {
+          showNotice(`Searching ${payload.format?.toUpperCase() || queueFormat.toUpperCase()} · position ${payload.position ?? 1}`);
+          return;
+        }
+        if ((payload.type === 'match_found' || payload.type === 'match_start') && payload.room) {
+          setQueueFormat(null);
+          setQueueElapsedSeconds(0);
+          onSelect('online', {
+            roomCode: payload.room.code,
+            host: payload.room.host,
+            guest: payload.room.guest,
+            isHost: payload.room.players[0]?.name === playerName,
+            phase: 'playing',
+            format: payload.room.format,
+            maxPlayers: payload.room.maxPlayers,
+            players: payload.room.players,
+          });
+          return;
+        }
+        if (payload.type === 'error' && payload.message) showNotice(payload.message);
+      } catch {
+        showNotice('Unable to read matchmaking response.');
+      }
+    };
+    socket.onerror = () => showNotice('Matchmaking server is offline.');
+    return () => {
+      if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'cancel_queue' }));
+      socket.close();
+      if (queueSocketRef.current === socket) queueSocketRef.current = null;
+    };
+  }, [onSelect, playerName, queueFormat]);
+
+  useEffect(() => {
     if (mode !== 'ROOM') return;
     const params = new URLSearchParams(window.location.search);
     if (roomCode) {
@@ -225,7 +283,20 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
 
   function selectMode(next: typeof modes[number]) {
     setMode(next.id);
-    showNotice(next.available ? '' : 'This mode needs the multiplayer backend. No fake queue was started.');
+    if (!next.available) {
+      showNotice('This mode needs the multiplayer backend.');
+      return;
+    }
+    if (next.id === 'ROOM') {
+      setQueueFormat(null);
+      setQueueElapsedSeconds(0);
+      showNotice('Private room mode selected.');
+      return;
+    }
+    const nextFormat: RoomFormat = next.id === '3V3' ? '3v3' : next.id === '2V2' ? '2v2' : '1v1';
+    setQueueFormat(nextFormat);
+    setQueueElapsedSeconds(0);
+    showNotice(`Searching ${nextFormat.toUpperCase()} match...`);
   }
 
   function createRoom() {
@@ -478,9 +549,9 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
 
           {mode === '1V1' && (
             <div className="mode-ready">
-              <strong>LOCAL CAMERA READY</strong>
-              <span>Landmark AI scoring enabled per frame.</span>
-              <button onClick={() => onSelect('local')}>ENTER 1V1 <span>↗</span></button>
+              <strong>ONLINE 1V1 READY</strong>
+              <span>Find an online opponent before entering the camera battle.</span>
+              {!queueFormat && <button onClick={() => selectMode(modes[0])}>FIND MATCH <span>↗</span></button>}
             </div>
           )}
 
@@ -489,12 +560,22 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
               <strong>{mode === '2V2' ? 'SQUAD QUEUE READY' : mode === '3V3' ? 'CREW QUEUE READY' : 'RANKED READY'}</strong>
               <span>
                 {mode === '2V2'
-                  ? 'This queue is enabled with the local fallback flow so you can test team match entry immediately.'
+                  ? 'Find three online players and enter the team battle together.'
                   : mode === '3V3'
-                  ? 'This crew queue is enabled with the local fallback flow for quick skirmishes.'
-                  : 'This ranked flow is enabled with the local fallback flow so the bracket can be tested without the backend.'}
+                  ? 'Find five online players and enter the team battle together.'
+                  : 'Competitive matchmaking uses the online ranked queue.'}
               </span>
-              <button onClick={() => onSelect(selectedMode?.gameMode ?? 'local')}>{mode === '2V2' ? 'ENTER 2V2' : mode === '3V3' ? 'ENTER 3V3' : 'ENTER RANKED'} <span>↗</span></button>
+              {!queueFormat && <button onClick={() => selectMode(modes.find((item) => item.id === mode) ?? modes[0])}>FIND MATCH <span>↗</span></button>}
+            </div>
+          )}
+
+          {queueFormat && (
+            <div className="mode-ready queue-ready-panel">
+              <strong>MATCHMAKING</strong>
+              <span>{queueFormat.toUpperCase()} · SEARCHING ONLINE PLAYERS</span>
+              <div className="queue-timer">{formatQueueTime(queueElapsedSeconds * 1000)}</div>
+              <span className="queue-pulse">WAITING FOR MATCH FOUND</span>
+              <button type="button" onClick={() => { setQueueFormat(null); setQueueElapsedSeconds(0); queueSocketRef.current?.close(); showNotice('Matchmaking cancelled.'); }}>CANCEL SEARCH</button>
             </div>
           )}
 

@@ -6,6 +6,8 @@ const app = express();
 const PORT = Number(process.env.PORT || 3001);
 const rooms = new Map();
 const socketRooms = new Map();
+const matchmakingQueues = new Map();
+const socketQueue = new Map();
 const ROOM_CAPACITIES = { '1v1': 2, '2v2': 4, '3v3': 6 };
 
 function makeRoomCode() {
@@ -32,6 +34,52 @@ function roomCapacity(format) {
 
 function makePlayer(id, name, index, ready = false, connected = true) {
   return { id, name: normalizeUsername(name), team: index % 2 === 0 ? 'A' : 'B', ready, connected };
+}
+
+function removeFromMatchmaking(ws) {
+  const format = socketQueue.get(ws);
+  if (!format) return;
+  const queue = matchmakingQueues.get(format) || [];
+  matchmakingQueues.set(format, queue.filter((entry) => entry.ws !== ws));
+  socketQueue.delete(ws);
+}
+
+function startQueuedMatch(format) {
+  const capacity = roomCapacity(format);
+  const queue = matchmakingQueues.get(format) || [];
+  if (queue.length < capacity) return;
+
+  const group = queue.splice(0, capacity);
+  matchmakingQueues.set(format, queue);
+  const code = makeRoomCode();
+  const players = group.map((entry, index) => {
+    const player = makePlayer(`p${index + 1}`, entry.username, index, true, true);
+    player.socket = entry.ws;
+    return player;
+  });
+  const room = {
+    code,
+    host: players[0].name,
+    hostSocket: players[0].socket,
+    hostReady: true,
+    guest: players[1]?.name || null,
+    guestSocket: players[1]?.socket || null,
+    guestReady: Boolean(players[1]),
+    clients: players.map((player) => player.socket),
+    createdAt: new Date().toISOString(),
+    phase: 'playing',
+    startedAt: new Date().toISOString(),
+    matchSeed: Date.now(),
+    format,
+    maxPlayers: capacity,
+    players,
+  };
+  rooms.set(code, room);
+  room.clients.forEach((client) => {
+    socketRooms.set(client, code);
+    socketQueue.delete(client);
+  });
+  broadcastMatchStart(code);
 }
 
 function getRoomSnapshot(room) {
@@ -94,6 +142,7 @@ function ensureRoomState(room) {
 }
 
 function leaveRoom(ws) {
+  removeFromMatchmaking(ws);
   const roomCode = socketRooms.get(ws);
   if (!roomCode) return;
   const room = rooms.get(roomCode);
@@ -243,6 +292,24 @@ wss.on('connection', (ws) => {
   ws.on('message', (raw) => {
     try {
       const message = JSON.parse(raw.toString());
+
+      if (message.type === 'queue_match') {
+        const format = normalizeFormat(message.format);
+        removeFromMatchmaking(ws);
+        const queue = matchmakingQueues.get(format) || [];
+        queue.push({ ws, username: normalizeUsername(message.username || 'Player') });
+        matchmakingQueues.set(format, queue);
+        socketQueue.set(ws, format);
+        ws.send(JSON.stringify({ type: 'queue_joined', format, position: queue.length, startedAt: new Date().toISOString() }));
+        startQueuedMatch(format);
+        return;
+      }
+
+      if (message.type === 'cancel_queue') {
+        removeFromMatchmaking(ws);
+        ws.send(JSON.stringify({ type: 'queue_cancelled' }));
+        return;
+      }
 
       if (message.type === 'create_room') {
         const existingRoomCode = socketRooms.get(ws);
@@ -435,8 +502,8 @@ wss.on('connection', (ws) => {
         });
         targetSocket.send(JSON.stringify({
           type: 'webrtc_signal',
-          from: senderRole,
-          to: message.target,
+          from: sender.id,
+          to: targetPlayer.id,
           signal: message.signal,
           roomCode,
         }));
