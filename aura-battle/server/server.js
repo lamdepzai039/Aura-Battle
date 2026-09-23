@@ -397,8 +397,12 @@ wss.on('connection', (ws) => {
           return;
         }
 
-        const player = room.players.find((candidate) => candidate.name === requestedName && !candidate.connected);
+        const player = room.players.find((candidate) => candidate.name === requestedName);
         if (player) {
+          if (player.socket && player.socket !== ws) {
+            room.clients = room.clients.filter((client) => client !== player.socket);
+            socketRooms.delete(player.socket);
+          }
           player.socket = ws;
           player.connected = true;
           room.hostSocket = room.players.find((candidate) => candidate.id === 'p1')?.socket || null;
