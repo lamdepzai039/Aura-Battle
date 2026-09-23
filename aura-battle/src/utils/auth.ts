@@ -1,3 +1,5 @@
+import { supabase } from './supabaseClient';
+
 const ACCOUNTS_KEY = 'aura-battle-accounts';
 const SESSION_KEY = 'aura-battle-session';
 const SESSION_EMAIL_KEY = 'aura-battle-session-email';
@@ -23,6 +25,20 @@ async function hashPassword(password: string): Promise<string> {
 }
 
 export async function registerAccount(username: string, email: string, password: string): Promise<{ ok: boolean; username?: string; message?: string }> {
+  if (supabase) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const { data, error } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password,
+      options: { data: { username: username.trim() } },
+    });
+    if (error) return { ok: false, message: error.message };
+    const nextUsername = username.trim() || data.user?.user_metadata?.username || normalizedEmail.split('@')[0];
+    if (!data.session) return { ok: false, message: 'Check your email to confirm the account before entering the arena.' };
+    localStorage.setItem(SESSION_KEY, nextUsername);
+    localStorage.setItem(SESSION_EMAIL_KEY, normalizedEmail);
+    return { ok: true, username: nextUsername };
+  }
   const accounts = readAccounts();
   const normalizedEmail = email.trim().toLowerCase();
   if (accounts.some((account) => account.email === normalizedEmail)) return { ok: false, message: 'An account with this email already exists.' };
@@ -35,6 +51,15 @@ export async function registerAccount(username: string, email: string, password:
 }
 
 export async function signIn(email: string, password: string): Promise<{ ok: boolean; username?: string; message?: string }> {
+  if (supabase) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
+    if (error || !data.user) return { ok: false, message: error?.message || 'Unable to authenticate.' };
+    const username = String(data.user.user_metadata?.username || normalizedEmail.split('@')[0]);
+    localStorage.setItem(SESSION_KEY, username);
+    localStorage.setItem(SESSION_EMAIL_KEY, normalizedEmail);
+    return { ok: true, username };
+  }
   const account = readAccounts().find((item) => item.email === email.trim().toLowerCase());
   if (!account || account.passwordHash !== await hashPassword(password)) return { ok: false, message: 'Email or password is incorrect.' };
   localStorage.setItem(SESSION_KEY, account.username);
@@ -62,4 +87,11 @@ export function startExternalSession(username: string, email: string) {
 export function clearSession() {
   localStorage.removeItem(SESSION_KEY);
   localStorage.removeItem(SESSION_EMAIL_KEY);
+  if (supabase) void supabase.auth.signOut();
+}
+
+export async function getAccessToken(): Promise<string | null> {
+  if (!supabase) return null;
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
 }

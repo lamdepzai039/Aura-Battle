@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { motion } from 'framer-motion';
 import { registerAccount, signIn, startExternalSession } from '../utils/auth';
+import { supabase } from '../utils/supabaseClient';
 
 type LoginMode = 'signin' | 'signup';
 
@@ -38,6 +39,17 @@ export function Login({ onAuthenticated }: { onAuthenticated: (username?: string
   const googleInitialized = useRef(false);
 
   useEffect(() => {
+    if (supabase) {
+      void supabase.auth.getSession().then(({ data }) => {
+        const user = data.session?.user;
+        if (!user) return;
+        const emailAddress = user.email || '';
+        const nextUsername = String(user.user_metadata?.username || emailAddress.split('@')[0] || 'SUPABASE PLAYER');
+        startExternalSession(nextUsername, emailAddress);
+        onAuthenticated(nextUsername);
+      });
+      return undefined;
+    }
     if (!googleClientId) return;
     const initialize = () => {
       if (!window.google || googleInitialized.current) return;
@@ -100,7 +112,7 @@ export function Login({ onAuthenticated }: { onAuthenticated: (username?: string
           <button className="auth-submit" type="submit">{mode === 'signin' ? 'ENTER ARENA' : 'CREATE ACCOUNT'} <span>↗</span></button>
         </form>
         <div className="auth-divider"><span>OR CONTINUE WITH</span></div>
-        <button className="google-button" type="button" disabled={!googleReady} onClick={() => window.google?.accounts.id.prompt()}><span className="google-g">G</span> GOOGLE <small>{googleReady ? 'CONTINUE' : 'LOADING'}</small></button>
+        <button className="google-button" type="button" disabled={!supabase && !googleReady} onClick={() => { if (supabase) { void supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } }); } else { window.google?.accounts.id.prompt(); } }}><span className="google-g">G</span> GOOGLE <small>{supabase || googleReady ? 'CONTINUE' : 'LOADING'}</small></button>
         <button className="guest-button" type="button" onClick={() => onAuthenticated('LAM')}>CONTINUE AS GUEST <span>→</span></button>
         <small className="auth-footer">By continuing, you agree to the Aura Battle terms.</small>
       </motion.section>

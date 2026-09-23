@@ -1,4 +1,13 @@
 export type OnlineRoomPhase = 'waiting' | 'ready' | 'playing';
+export type RoomFormat = '1v1' | '2v2' | '3v3';
+
+export type RoomPlayer = {
+  id: string;
+  name: string;
+  team: 'A' | 'B';
+  ready: boolean;
+  connected: boolean;
+};
 
 export type OnlineRoomState = {
   code: string;
@@ -11,6 +20,9 @@ export type OnlineRoomState = {
   guestReady: boolean;
   startedAt: string | null;
   matchSeed: number | null;
+  format: RoomFormat;
+  maxPlayers: 2 | 4 | 6;
+  players: RoomPlayer[];
 };
 
 export type LobbyMessage =
@@ -34,8 +46,11 @@ export function generateRoomCode() {
   return code;
 }
 
-export function createFallbackRoomState(host: string, guest: string | null = null, codeOverride?: string): OnlineRoomState {
+export function createFallbackRoomState(host: string, guest: string | null = null, codeOverride?: string, format: RoomFormat = '1v1'): OnlineRoomState {
   const code = sanitizeRoomCode(codeOverride ?? generateRoomCode());
+  const maxPlayers = format === '3v3' ? 6 : format === '2v2' ? 4 : 2;
+  const players: RoomPlayer[] = [{ id: 'p1', name: host.trim() || 'PLAYER', team: 'A', ready: false, connected: true }];
+  if (guest) players.push({ id: 'p2', name: guest, team: 'B', ready: false, connected: true });
   const room: OnlineRoomState = {
     code,
     host: host.trim() || 'PLAYER',
@@ -47,6 +62,9 @@ export function createFallbackRoomState(host: string, guest: string | null = nul
     guestReady: false,
     startedAt: null,
     matchSeed: null,
+    format,
+    maxPlayers,
+    players,
   };
 
   if (typeof localStorage !== 'undefined') {

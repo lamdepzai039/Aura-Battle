@@ -5,9 +5,7 @@ import { Settings } from './components/Settings';
 import { Shop } from './components/Shop';
 import { Guild } from './components/Guild';
 import { PlayerSetup } from './components/PlayerSetup';
-import { MutationMap } from './components/MutationMap';
 import { Leaderboard } from './components/Leaderboard';
-import { CameraView } from './components/CameraView';
 import { Countdown } from './components/Countdown';
 import { ScoreDisplay } from './components/ScoreDisplay';
 import { RoundIntro } from './components/RoundIntro';
@@ -19,6 +17,10 @@ const PlayMode = lazy(async () => {
   const module = await import('./components/PlayMode');
   return { default: module.PlayMode };
 });
+const CameraView = lazy(async () => {
+  const module = await import('./components/CameraView');
+  return { default: module.CameraView };
+});
 import { useAuraMatch } from './game/useAuraMatch';
 import { currentChallenge } from './game/gameState';
 import { resolveBattleSeatNames } from './game/battleSeats';
@@ -26,13 +28,12 @@ import { recordResult } from './utils/leaderboard';
 import { getSession, getSessionEmail } from './utils/auth';
 import { isAdminAccount } from './utils/playerProfile';
 import { addEventProgress } from './utils/eventStore';
-import { resolveLobbyUrl, type OnlineRoomState } from './utils/onlineRoom';
-import { resolveSignalTarget } from './utils/webrtcSignal';
-import { applyMatchResult } from './utils/rankStore';
+import { resolveLobbyUrl, type OnlineRoomState, type RoomFormat, type RoomPlayer } from './utils/onlineRoom';
+import { applyMatchResult, syncRankResult, syncTeamRankResult } from './utils/rankStore';
 import { awardMatchOutcome } from './utils/shopEconomy';
-import type { GameMode, MatchState, MutationLoadout, PlayerId } from './game/types';
+import type { GameMode, MatchState, PlayerId } from './game/types';
 
-type AppPhase = 'login' | 'home' | 'shop' | 'guild' | 'settings' | 'mode_select' | 'camera_check' | 'player_setup' | 'transition' | 'mutation_map' | 'online_waiting' | 'battle' | 'leaderboard';
+type AppPhase = 'login' | 'home' | 'shop' | 'guild' | 'settings' | 'mode_select' | 'camera_check' | 'player_setup' | 'transition' | 'online_waiting' | 'battle' | 'leaderboard';
 const DEV = import.meta.env.DEV;
 
 type OnlineLobbySession = {
@@ -41,6 +42,9 @@ type OnlineLobbySession = {
   guest: string | null;
   isHost: boolean;
   phase: 'waiting' | 'ready' | 'playing';
+  format: RoomFormat;
+  maxPlayers: number;
+  players: RoomPlayer[];
 };
 
 export default function App() {
@@ -48,30 +52,34 @@ export default function App() {
   const [username, setUsername] = useState(() => getSession() || 'LAM');
   const [sessionEmail, setSessionEmail] = useState(() => getSessionEmail());
   const [pendingMode, setPendingMode] = useState<GameMode>('local');
-  const [mutationSession, setMutationSession] = useState<{ playerName: string; rivalName: string; loadout: MutationLoadout; skinId: 'skin-1' | 'skin-2' | 'skin-3' } | null>(null);
-  const [transitionTarget, setTransitionTarget] = useState<'mutation_map' | 'battle' | null>(null);
+  const [transitionTarget, setTransitionTarget] = useState<'battle' | null>(null);
   const [onlineLobby, setOnlineLobby] = useState<OnlineLobbySession | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [peerConnected, setPeerConnected] = useState(false);
+  const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
+  const [peerConnected, setPeerConnected] = useState<Record<string, boolean>>({});
+  const [screenSharing, setScreenSharing] = useState(false);
   const onlineSocketRef = useRef<WebSocket | null>(null);
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const peerConnectionsRef = useRef(new Map<string, RTCPeerConnection>());
+  const screenStreamRef = useRef<MediaStream | null>(null);
   const recordedRef = useRef(false);
   const { match, videoRef, cameraStatus, enableCamera, attachStreamToVideo, trackerStatus, fps, countdownValue, liveFeedback, lastRecord, auraBreak, debugOpen, setDebugOpen, startMatch, goHome, rematch, continueToNextRound, winner, setPlayerName, debugForceWin, debugSkipRound } = useAuraMatch();
   const challenge = currentChallenge(match);
+  const onlineRoomCode = onlineLobby?.roomCode;
 
-  const sendPeerSignal = useCallback((signal: unknown, target: 'host' | 'guest') => {
-    if (!onlineLobby?.roomCode) return;
+  const localPeerId = onlineLobby?.players.find((player) => player.name === username)?.id ?? (onlineLobby?.isHost ? 'p1' : 'p2');
+
+  const sendPeerSignal = useCallback((signal: unknown, target: string) => {
+    if (!onlineRoomCode) return;
     const socket = onlineSocketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    const payload = { type: 'webrtc_signal', roomCode: onlineLobby.roomCode, target, signal };
-    console.info('[AuraBattle][Peer] send signal', { target, signalType: (signal as { type?: string })?.type, roomCode: onlineLobby.roomCode });
+    const payload = { type: 'webrtc_signal', roomCode: onlineRoomCode, target, signal };
+    console.info('[AuraBattle][Peer] send signal', { target, signalType: (signal as { type?: string })?.type, roomCode: onlineRoomCode });
     socket.send(JSON.stringify(payload));
-  }, [onlineLobby?.roomCode]);
+  }, [onlineRoomCode]);
 
-  const ensurePeerConnection = useCallback(async () => {
+  const ensurePeerConnection = useCallback(async (peerId: string) => {
     if (!onlineLobby?.roomCode || !videoRef.current) return null;
-    if (peerConnectionRef.current) return peerConnectionRef.current;
+    const existingConnection = peerConnectionsRef.current.get(peerId);
+    if (existingConnection) return existingConnection;
 
     console.info('[AuraBattle][Peer] create RTCPeerConnection', { roomCode: onlineLobby.roomCode, isHost: onlineLobby.isHost });
     const peerConnection = new RTCPeerConnection({
@@ -82,6 +90,7 @@ export default function App() {
     if (localStream) {
       localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
     }
+    screenStreamRef.current?.getTracks().forEach((track) => peerConnection.addTrack(track, screenStreamRef.current as MediaStream));
 
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
@@ -91,7 +100,7 @@ export default function App() {
           sdpMid: candidate.sdpMid,
           roomCode: onlineLobby.roomCode,
         });
-        sendPeerSignal({ type: 'ice-candidate', candidate }, resolveSignalTarget({ isHost: onlineLobby.isHost }));
+        sendPeerSignal({ type: 'ice-candidate', candidate }, peerId);
       }
     };
 
@@ -99,38 +108,35 @@ export default function App() {
       const nextStream = event.streams[0];
       if (nextStream) {
         console.info('[AuraBattle][Peer] remote track received', { streamId: nextStream.id, tracks: nextStream.getTracks().map((track) => track.kind) });
-        setRemoteStream(nextStream);
+        setRemoteStreams((current) => ({ ...current, [peerId]: nextStream }));
       }
     };
 
     peerConnection.onconnectionstatechange = () => {
       console.info('[AuraBattle][Peer] connection state changed', { state: peerConnection.connectionState, roomCode: onlineLobby.roomCode });
-      setPeerConnected(['connected', 'completed'].includes(peerConnection.connectionState));
+      setPeerConnected((current) => ({ ...current, [peerId]: ['connected', 'completed'].includes(peerConnection.connectionState) }));
     };
 
-    peerConnectionRef.current = peerConnection;
+    peerConnectionsRef.current.set(peerId, peerConnection);
     return peerConnection;
   }, [onlineLobby, sendPeerSignal, videoRef]);
 
   useEffect(() => {
-    if (!remoteVideoRef.current || !remoteStream) return;
-    remoteVideoRef.current.srcObject = remoteStream;
-  }, [remoteStream]);
-
-  useEffect(() => {
     if (!onlineLobby?.roomCode || !videoRef.current || match.mode !== 'online') return;
     const startPeerLink = async () => {
-      const peerConnection = await ensurePeerConnection();
-      if (!peerConnection || !onlineLobby.guest) return;
-      if (onlineLobby.isHost) {
+      if (!onlineLobby.isHost) return;
+      const peers = onlineLobby.players.filter((player) => player.id !== localPeerId && player.connected);
+      for (const player of peers) {
+        const peerConnection = await ensurePeerConnection(player.id);
+        if (!peerConnection) continue;
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
-        sendPeerSignal({ type: 'offer', sdp: offer.sdp }, 'guest');
+        sendPeerSignal({ type: 'offer', sdp: offer.sdp }, player.id);
       }
     };
 
     void startPeerLink();
-  }, [cameraStatus, ensurePeerConnection, match.mode, onlineLobby, sendPeerSignal, videoRef]);
+  }, [cameraStatus, ensurePeerConnection, localPeerId, match.mode, onlineLobby, sendPeerSignal, videoRef]);
 
   useEffect(() => {
     if (!onlineSocketRef.current || !onlineLobby?.roomCode) return;
@@ -139,9 +145,9 @@ export default function App() {
       try {
         const payload = JSON.parse(event.data) as {
           type?: string;
-          from?: 'host' | 'guest';
-          to?: 'host' | 'guest';
-          target?: 'host' | 'guest';
+          from?: string;
+          to?: string;
+          target?: string;
           signal?: { type?: string; sdp?: string; candidate?: RTCIceCandidateInit };
         };
 
@@ -150,8 +156,9 @@ export default function App() {
         }
 
         if (payload.type !== 'webrtc_signal' || !payload.signal) return;
-        if (payload.to && payload.to !== (onlineLobby.isHost ? 'host' : 'guest')) return;
-        const peerConnection = await ensurePeerConnection();
+        if (payload.to && payload.to !== localPeerId) return;
+        if (!payload.from) return;
+        const peerConnection = await ensurePeerConnection(payload.from);
         if (!peerConnection) return;
 
         const signalType = payload.signal.type;
@@ -160,7 +167,7 @@ export default function App() {
           await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: payload.signal.sdp ?? '' }));
           const answer = await peerConnection.createAnswer();
           await peerConnection.setLocalDescription(answer);
-          const answerTarget = payload.from ?? resolveSignalTarget({ isHost: onlineLobby.isHost });
+          const answerTarget = payload.from;
           console.info('[AuraBattle][Peer] sending answer', { to: answerTarget, roomCode: onlineLobby.roomCode });
           sendPeerSignal({ type: 'answer', sdp: answer.sdp }, answerTarget);
           return;
@@ -187,25 +194,65 @@ export default function App() {
 
     onlineSocketRef.current.addEventListener('message', handleSocketMessage);
     return () => onlineSocketRef.current?.removeEventListener('message', handleSocketMessage);
-  }, [ensurePeerConnection, onlineLobby, sendPeerSignal]);
+  }, [ensurePeerConnection, localPeerId, onlineLobby, sendPeerSignal]);
+
+  const shareScreen = useCallback(async () => {
+    if (!onlineLobby?.roomCode || !navigator.mediaDevices?.getDisplayMedia) return;
+    try {
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      screenStreamRef.current = displayStream;
+      setScreenSharing(true);
+      displayStream.getVideoTracks()[0]?.addEventListener('ended', () => {
+        screenStreamRef.current = null;
+        setScreenSharing(false);
+      });
+
+      for (const player of onlineLobby.players) {
+        if (player.id === localPeerId || !player.connected) continue;
+        const peerConnection = await ensurePeerConnection(player.id);
+        if (!peerConnection) continue;
+        displayStream.getTracks().forEach((track) => peerConnection.addTrack(track, displayStream));
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        sendPeerSignal({ type: 'offer', sdp: offer.sdp }, player.id);
+      }
+    } catch (error) {
+      console.info('[AuraBattle][Peer] screen sharing cancelled or unavailable', error);
+    }
+  }, [ensurePeerConnection, localPeerId, onlineLobby, sendPeerSignal]);
 
   useEffect(() => {
     if (match.screen === 'final_result' && !recordedRef.current) {
       recordedRef.current = true;
       const playerOneWon = match.players.p1.aura >= match.players.p2.aura;
       const playerTwoWon = match.players.p2.aura >= match.players.p1.aura;
+      const syncFinishedRank = (outcome: 'win' | 'loss' | 'tie') => {
+        const isTeamRoom = match.mode === 'online' && onlineLobby?.format !== '1v1';
+        if (isTeamRoom && onlineLobby) {
+          void syncTeamRankResult(
+            onlineLobby.players.filter((player) => player.team === 'A').map((player) => player.name),
+            onlineLobby.players.filter((player) => player.team === 'B').map((player) => player.name),
+            outcome,
+          );
+          return;
+        }
+        void syncRankResult(match.players.p1.name, match.players.p2.name, outcome);
+      };
 
       recordResult(match.players.p1.name, match.players.p1.aura);
       if (match.mode === 'local') recordResult(match.players.p2.name, match.players.p2.aura);
 
       if (winner === 'tie') {
         applyMatchResult(match.players.p1.name, match.players.p2.name, 'tie', match.mode);
+        syncFinishedRank('tie');
         awardMatchOutcome('tie', match.mode);
       } else if (winner === 'p1') {
         applyMatchResult(match.players.p1.name, match.players.p2.name, 'win', match.mode);
+        syncFinishedRank('win');
         awardMatchOutcome('win', match.mode);
       } else if (winner === 'p2') {
         applyMatchResult(match.players.p1.name, match.players.p2.name, 'loss', match.mode);
+        syncFinishedRank('loss');
         awardMatchOutcome('loss', match.mode);
       }
 
@@ -234,15 +281,13 @@ export default function App() {
       }
     }
     if (match.screen === 'round_intro' && match.roundIndex === 0 && match.history.length === 0) recordedRef.current = false;
-  }, [match.screen, match.roundIndex, match.history, match.mode, match.players, winner]);
+  }, [match.screen, match.roundIndex, match.history, match.mode, match.players, onlineLobby, winner]);
 
   useEffect(() => {
     if (phase !== 'transition' || !transitionTarget) return;
 
     const timeout = window.setTimeout(() => {
-      if (transitionTarget === 'mutation_map') {
-        setPhase('mutation_map');
-      } else if (transitionTarget === 'battle') {
+      if (transitionTarget === 'battle') {
         setPhase('battle');
       } else {
         setPhase('home');
@@ -341,19 +386,13 @@ export default function App() {
       return;
     }
     setPendingMode(mode);
-    setPhase(mode === 'mutation' ? 'player_setup' : 'camera_check');
+    setPhase('camera_check');
   }} onBack={() => setPhase('home')} /></Suspense>;
 
-  if (phase === 'camera_check') return <div className="fixed inset-0 flex flex-col items-center justify-center px-6 gap-6"><p className="font-display text-xs tracking-[0.3em] text-white/50">CAMERA CHECK</p><div className="w-full max-w-2xl"><CameraView ref={videoRef} status={cameraStatus} onEnable={enableCamera} onVideoReady={attachStreamToVideo} /></div>{cameraStatus === 'granted' && <button onClick={() => setPhase('player_setup')} className="px-8 py-3 rounded-full font-display text-sm tracking-wide bg-cyan-400 text-black hover:bg-cyan-300 transition">CONTINUE</button>}<button onClick={() => setPhase('home')} className="text-xs text-white/40 hover:text-white/70 font-display tracking-widest">← BACK</button></div>;
+  if (phase === 'camera_check') return <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center bg-[#050816] text-xs font-display tracking-[0.3em] text-cyan-300">LOADING CAMERA…</div>}><div className="fixed inset-0 flex flex-col items-center justify-center px-6 gap-6"><p className="font-display text-xs tracking-[0.3em] text-white/50">CAMERA CHECK</p><div className="w-full max-w-2xl"><CameraView ref={videoRef} status={cameraStatus} onEnable={enableCamera} onVideoReady={attachStreamToVideo} /></div>{cameraStatus === 'granted' && <button onClick={() => setPhase('player_setup')} className="px-8 py-3 rounded-full font-display text-sm tracking-wide bg-cyan-400 text-black hover:bg-cyan-300 transition">CONTINUE</button>}<button onClick={() => setPhase('home')} className="text-xs text-white/40 hover:text-white/70 font-display tracking-widest">← BACK</button></div></Suspense>;
 
-  if (phase === 'player_setup') return <PlayerSetup mode={pendingMode} onBack={() => setPhase('mode_select')} onStart={(p1, p2, prompt, mutation: MutationLoadout | undefined, skinId: 'skin-1' | 'skin-2' | 'skin-3' = 'skin-1') => {
-    if (pendingMode === 'mutation' && mutation) {
-      setMutationSession({ playerName: p1, rivalName: p2, loadout: mutation, skinId });
-      setTransitionTarget('mutation_map');
-      setPhase('transition');
-      return;
-    }
-    startMatch(pendingMode, prompt, mutation);
+  if (phase === 'player_setup') return <PlayerSetup mode={pendingMode} onBack={() => setPhase('mode_select')} onStart={(p1, p2, prompt) => {
+    startMatch(pendingMode, prompt);
     setPlayerName('p1', p1);
     setPlayerName('p2', p2);
     setTransitionTarget('battle');
@@ -366,7 +405,7 @@ export default function App() {
       <div className="transition-rings" />
       <div className="transition-core">
         <span className="transition-label">AURA SHIFT</span>
-        <strong>{transitionTarget === 'mutation_map' ? 'ENTERING MUTATION ZONE' : 'STARTING BATTLE'}</strong>
+        <strong>STARTING BATTLE</strong>
       </div>
     </div>
   );
@@ -377,8 +416,6 @@ export default function App() {
     guest: onlineLobby?.guest ?? 'RIVAL',
     isHost: onlineLobby?.isHost ?? true,
   });
-
-  if (phase === 'mutation_map' && mutationSession) return <MutationMap playerName={mutationSession.playerName} rivalName={mutationSession.rivalName} loadout={mutationSession.loadout} skinId={mutationSession.skinId} onHome={() => { setMutationSession(null); setPhase('home'); }} />;
 
   if (phase === 'online_waiting') return <div className="fixed inset-0 flex flex-col items-center justify-center px-6 gap-6 bg-[#050816]">
     <div className="text-center space-y-4">
@@ -428,12 +465,23 @@ export default function App() {
     {match.screen === 'round_intro' && challenge && <RoundIntro challenge={challenge} roundNumber={match.roundIndex + 1} totalRounds={totalRounds} mutation={match.mutation} />}
     {match.screen === 'round_result' && lastRecord && <RoundResult record={lastRecord} playerNames={{ p1: match.players.p1.name, p2: match.players.p2.name }} onContinue={continueToNextRound} isFinal={match.roundIndex + 1 >= totalRounds} />}
     {match.screen === 'final_result' && <FinalResult match={match} winner={winner} onRematch={rematch} onNewBattle={() => setPhase('home')} onShare={() => shareResult(match, winner)} />}
-    {(match.screen === 'challenge' || match.screen === 'countdown') && <div className="relative w-full max-w-5xl"><div className="flex items-center justify-between mb-2 px-1"><span className="font-display text-xs text-white/50 tracking-widest">ROUND {match.roundIndex + 1}/{totalRounds}</span>{challenge && <span className="font-display text-xs text-white/50 tracking-widest">{challenge.shortLabel}</span>}</div><div className="relative"><CameraView ref={videoRef} status={cameraStatus} onEnable={enableCamera} onVideoReady={attachStreamToVideo} splitView={match.mode === 'local'}><ScoreDisplay playerName={match.players.p1.name || liveSeatNames.p1} aura={match.players.p1.aura} feedback={liveFeedback.p1} align="left" label="P1" /><ScoreDisplay playerName={match.players.p2.name || liveSeatNames.p2} aura={match.players.p2.aura} feedback={liveFeedback.p2} align="right" label="P2" /><Countdown value={countdownValue} /></CameraView>{match.mode === 'online' && remoteStream && <div className="absolute bottom-4 right-4 z-10 w-[220px] sm:w-[260px] overflow-hidden rounded-2xl border border-cyan-300/70 bg-slate-950/80 shadow-[0_0_35px_rgba(34,211,238,0.22)] backdrop-blur-sm"><div className="flex items-center justify-between bg-slate-950/85 px-2.5 py-1.5 text-[10px] font-display tracking-[0.24em] text-cyan-200"><span>RIVAL</span><span className={peerConnected ? 'text-emerald-300' : 'text-amber-300'}>{peerConnected ? 'LIVE' : 'CONNECTING'}</span></div><div className="relative h-36 w-full overflow-hidden"><video ref={remoteVideoRef} autoPlay playsInline muted className="h-full w-full object-cover" style={{ transform: 'scaleX(-1)' }} /></div></div>}</div></div>}
+    {(match.screen === 'challenge' || match.screen === 'countdown') && <div className="relative w-full max-w-5xl"><div className="flex items-center justify-between mb-2 px-1"><span className="font-display text-xs text-white/50 tracking-widest">ROUND {match.roundIndex + 1}/{totalRounds}</span>{challenge && <span className="font-display text-xs text-white/50 tracking-widest">{challenge.shortLabel}</span>}</div><div className="relative"><CameraView ref={videoRef} status={cameraStatus} onEnable={enableCamera} onVideoReady={attachStreamToVideo} splitView={match.mode === 'local'}><ScoreDisplay playerName={match.players.p1.name || liveSeatNames.p1} aura={match.players.p1.aura} feedback={liveFeedback.p1} align="left" label="P1" /><ScoreDisplay playerName={match.players.p2.name || liveSeatNames.p2} aura={match.players.p2.aura} feedback={liveFeedback.p2} align="right" label="P2" /><Countdown value={countdownValue} /></CameraView>{match.mode === 'online' && <div className="absolute bottom-4 right-4 z-10 grid max-h-64 max-w-[calc(100%-1rem)] grid-cols-1 gap-2 overflow-auto sm:grid-cols-2">{Object.entries(remoteStreams).map(([peerId, stream]) => <RemoteFeed key={peerId} peerId={peerId} stream={stream} connected={Boolean(peerConnected[peerId])} />)}</div>}</div></div>}
+    {match.mode === 'online' && <button type="button" onClick={() => void shareScreen()} className="fixed bottom-3 left-3 z-50 rounded-full border border-white/15 bg-white/10 px-3 py-2 text-[10px] font-display tracking-widest text-white/70 hover:bg-white/20">{screenSharing ? 'SCREEN LIVE' : 'SHARE SCREEN'}</button>}
     <AuraBreak playerId={auraBreak} playerName={auraBreak ? match.players[auraBreak].name : undefined} />
     {DEV && debugOpen && challenge && <DebugPanel fps={fps} trackerStatus={trackerStatus} roundIndex={match.roundIndex} totalRounds={totalRounds} challengeId={challenge.id} onForceWin={debugForceWin} onSkipRound={debugSkipRound} onClose={() => setDebugOpen(false)} />}
     {DEV && !debugOpen && <button onClick={() => setDebugOpen(true)} className="fixed bottom-3 right-3 z-50 text-[10px] px-2 py-1 rounded bg-white/10 text-white/50 hover:text-white font-mono">debug</button>}
     <button onClick={() => { goHome(); setPhase('home'); }} className="fixed top-3 left-3 z-50 text-[10px] px-2 py-1 rounded bg-white/10 text-white/50 hover:text-white font-display tracking-widest">← HOME</button>
   </div>;
+}
+
+function RemoteFeed({ peerId, stream, connected }: { peerId: string; stream: MediaStream; connected: boolean }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.srcObject = stream;
+  }, [stream]);
+
+  return <div className="w-[180px] overflow-hidden rounded-2xl border border-cyan-300/70 bg-slate-950/80 shadow-[0_0_35px_rgba(34,211,238,0.22)] backdrop-blur-sm"><div className="flex items-center justify-between bg-slate-950/85 px-2.5 py-1.5 text-[10px] font-display tracking-[0.24em] text-cyan-200"><span>{peerId.toUpperCase()}</span><span className={connected ? 'text-emerald-300' : 'text-amber-300'}>{connected ? 'LIVE' : 'CONNECTING'}</span></div><div className="relative h-28 w-full overflow-hidden"><video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" /></div></div>;
 }
 
 async function shareResult(match: MatchState, winner: PlayerId | 'tie') {

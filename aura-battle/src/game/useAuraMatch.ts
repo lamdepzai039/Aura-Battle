@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { Challenge, GameMode, MutationLoadout, PlayerId, RoundRecord, ScoreEvent, TrackingFrame } from './types';
 import { scoreLandmarkFrame } from '../scoring/landmarkAI';
-import { Tracker, type TrackerLoadProgress } from '../vision/tracker';
+import type { Tracker, TrackerLoadProgress } from '../vision/tracker';
 import { createInitialMatch, currentChallenge, matchReducer, overallWinner } from './gameState';
 import { finalizeRound, generateBotRoundCapture, type PlayerRoundCapture } from './roundManager';
 import { buildDefaultQueue, buildMvpQueue } from '../challenges/challengeRegistry';
@@ -84,12 +84,13 @@ export function useAuraMatch() {
 
   // ---------------- Match lifecycle ----------------
 
-  const startMatch = useCallback((mode: GameMode, prompt?: string, mutation?: MutationLoadout, seed?: number) => {
+  const startMatch = useCallback(async (mode: GameMode, prompt?: string, mutation?: MutationLoadout, seed?: number) => {
     const queue = mode === 'online' ? buildDefaultQueue(prompt, seed ?? Date.now()) : buildDefaultQueue(prompt);
     trackerRef.current?.dispose();
-    trackerRef.current = new Tracker(setTrackerStatus, mode === 'local');
     introStartedForRef.current = -1;
     dispatch({ type: 'RESET', mode, queue, mutation });
+    const { Tracker: TrackerConstructor } = await import('../vision/tracker');
+    trackerRef.current = new TrackerConstructor(setTrackerStatus, mode === 'local');
   }, []);
 
   const goHome = useCallback(() => {

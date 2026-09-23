@@ -1,9 +1,9 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import type { GameMode } from '../game/types';
 import { LOCAL_ROOM_KEY, clearLocalRoom, clearStaleLocalRoom, createLocalRoom, getLocalRoom, joinLocalRoom, updateLocalRoom } from '../utils/roomStore';
-import { createFallbackRoomState, resolveLobbyUrl, sanitizeRoomCode, type OnlineRoomState } from '../utils/onlineRoom';
+import { createFallbackRoomState, resolveLobbyUrl, sanitizeRoomCode, type OnlineRoomState, type RoomFormat } from '../utils/onlineRoom';
 
-type QueueMode = '1V1' | 'AURA MUTATION' | 'AURA SANDBOX' | '2V2' | '3V3' | 'RANKED' | 'ROOM';
+type QueueMode = '1V1' | '2V2' | '3V3' | 'RANKED' | 'ROOM';
 
 type OnlineBattleContext = {
   roomCode: string;
@@ -11,10 +11,14 @@ type OnlineBattleContext = {
   guest: string | null;
   isHost: boolean;
   phase: OnlineRoomState['phase'];
+  format: RoomFormat;
+  maxPlayers: number;
+  players: OnlineRoomState['players'];
 };
 
 export function PlayMode({ username, onSelect, onBack }: { username?: string; onSelect: (mode: GameMode, onlineContext?: OnlineBattleContext) => void; onBack: () => void }) {
   const [mode, setMode] = useState<QueueMode>('1V1');
+  const [roomFormat, setRoomFormat] = useState<RoomFormat>('1v1');
   const [roomCode, setRoomCode] = useState(() => {
     if (typeof window === 'undefined') return '';
     const params = new URLSearchParams(window.location.search);
@@ -101,14 +105,15 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
 
     nextSocket.onmessage = (event) => {
       try {
-        const payload = JSON.parse(event.data) as { type?: string; room?: OnlineRoomState; message?: string; you?: 'host' | 'guest' };
+        const payload = JSON.parse(event.data) as { type?: string; room?: OnlineRoomState; message?: string; you?: string | null };
         if (payload.type === 'room_state' && payload.room) {
           setOnlineRoom(payload.room);
           setRoomCode(payload.room.code);
-          const isCurrentHost = payload.room.host === playerName || payload.you === 'host';
-          const isCurrentGuest = payload.room.guest === playerName || payload.you === 'guest';
+          const currentPlayer = payload.room.players.find((player) => player.id === payload.you || player.name === playerName);
+          const isCurrentHost = currentPlayer?.id === 'p1' || payload.room.host === playerName || payload.you === 'host';
+          const isCurrentGuest = Boolean(currentPlayer && currentPlayer.id !== 'p1');
           setIsHost(isCurrentHost);
-          setSelfReady(isCurrentHost ? payload.room.hostReady : isCurrentGuest ? payload.room.guestReady : false);
+          setSelfReady(currentPlayer?.ready ?? (isCurrentHost ? payload.room.hostReady : isCurrentGuest ? payload.room.guestReady : false));
 
           if (payload.room.phase === 'playing') {
             showNotice(`Battle live in room ${payload.room.code}.`);
@@ -118,6 +123,9 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
               guest: payload.room.guest,
               isHost: isCurrentHost,
               phase: payload.room.phase,
+              format: payload.room.format,
+              maxPlayers: payload.room.maxPlayers,
+              players: payload.room.players,
             });
             return;
           }
@@ -129,9 +137,10 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
         if (payload.type === 'match_start' && payload.room) {
           setOnlineRoom(payload.room);
           setRoomCode(payload.room.code);
-          const currentPlayerIsHost = payload.room.host === playerName;
+          const currentPlayer = payload.room.players.find((player) => player.id === payload.you || player.name === playerName);
+          const currentPlayerIsHost = currentPlayer?.id === 'p1' || payload.room.host === playerName;
           setIsHost(currentPlayerIsHost);
-          setSelfReady(currentPlayerIsHost ? payload.room.hostReady : payload.room.guestReady);
+          setSelfReady(currentPlayer?.ready ?? (currentPlayerIsHost ? payload.room.hostReady : payload.room.guestReady));
           showNotice(`${payload.room.host} vs ${payload.room.guest ?? 'rival'} · battle started.`);
           onSelect('online', {
             roomCode: payload.room.code,
@@ -139,6 +148,9 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
             guest: payload.room.guest,
             isHost: currentPlayerIsHost,
             phase: payload.room.phase,
+            format: payload.room.format,
+            maxPlayers: payload.room.maxPlayers,
+            players: payload.room.players,
           });
           return;
         }
@@ -205,11 +217,9 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
 
   const modes: Array<{ id: QueueMode; title: string; description: string; available: boolean; gameMode?: GameMode }> = [
     { id: '1V1', title: '1V1 DUEL', description: 'One camera. Two players. Pure aura.', available: true, gameMode: 'local' },
-    { id: 'AURA MUTATION', title: 'AURA MUTATION', description: 'Your playstyle changes your current, then the arena responds in real time.', available: true, gameMode: 'mutation' },
-    { id: 'AURA SANDBOX', title: 'AURA SANDBOX', description: 'Explore a 2D world, mine blocks, collect resources, fight, and mutate your abilities in local play.', available: true, gameMode: 'mutation' },
-    { id: '2V2', title: '2V2 SQUAD', description: 'Local squad queue fallback with a ready-to-play team duel.', available: true, gameMode: 'duo' },
-    { id: '3V3', title: '3V3 CREW', description: 'Local crew queue fallback for quick 3v3-style testing.', available: true, gameMode: 'crew' },
-    { id: 'RANKED', title: 'RANKED', description: 'Competitive bracket flow enabled with local fallback for now.', available: true, gameMode: 'ranked' },
+    { id: '2V2', title: '2V2 SQUAD', description: 'Two teams of two with shared team score and live player feeds.', available: true, gameMode: 'duo' },
+    { id: '3V3', title: '3V3 CREW', description: 'Two teams of three built for coordinated global rooms.', available: true, gameMode: 'crew' },
+    { id: 'RANKED', title: 'RANKED', description: 'Competitive rating progression for every team format.', available: true, gameMode: 'ranked' },
     { id: 'ROOM', title: 'PRIVATE ROOM', description: 'Create or join with a room code.', available: true },
   ];
 
@@ -221,7 +231,7 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
   function createRoom() {
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) {
-      const fallbackRoom = createFallbackRoomState(playerName);
+      const fallbackRoom = createFallbackRoomState(playerName, null, undefined, roomFormat);
       createLocalRoom(playerName, fallbackRoom.code);
       updateLocalRoom({
         ...fallbackRoom,
@@ -246,7 +256,7 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
     }
     setIsHost(true);
     setSelfReady(false);
-    socket.send(JSON.stringify({ type: 'create_room', username: playerName }));
+    socket.send(JSON.stringify({ type: 'create_room', username: playerName, format: roomFormat }));
     setNotice('Creating room...');
   }
 
@@ -355,6 +365,9 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
         guest: startRoom.guest,
         isHost: true,
         phase: startRoom.phase,
+        format: startRoom.format,
+        maxPlayers: startRoom.maxPlayers,
+        players: startRoom.players,
       });
       return;
     }
@@ -401,7 +414,7 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
         <div className="mode-rail">
           {modes.map((item) => (
             <button key={item.id} className={mode === item.id ? 'active' : ''} onClick={() => selectMode(item)}>
-              <span>{item.id === 'RANKED' ? '♜' : item.id === 'ROOM' ? '⌘' : item.id === 'AURA SANDBOX' ? '▣' : item.id === 'AURA MUTATION' ? '✦' : '⚔'}</span>
+              <span>{item.id === 'RANKED' ? '♜' : item.id === 'ROOM' ? '⌘' : '⚔'}</span>
               <strong>{item.title}</strong>
               <small>{item.available ? 'READY' : 'BACKEND REQUIRED'}</small>
             </button>
@@ -421,6 +434,15 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
               </div>
 
               <label>
+                ROOM FORMAT
+                <div className="room-actions compact" role="group" aria-label="Room format">
+                  {(['1v1', '2v2', '3v3'] as RoomFormat[]).map((format) => (
+                    <button key={format} type="button" className={roomFormat === format ? 'active' : ''} onClick={() => setRoomFormat(format)}>{format.toUpperCase()}</button>
+                  ))}
+                </div>
+              </label>
+
+              <label>
                 ROOM CODE
                 <input
                   value={roomCode}
@@ -438,7 +460,7 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
               {(onlineRoom || room) && (
                 <div className="room-created">
                   <strong>ROOM {roomLabel}</strong>
-                  <span>{onlineRoom ? (onlineRoom.phase === 'playing' ? `MATCH LIVE · ${onlineRoom.host} vs ${onlineRoom.guest ?? 'RIVAL'}` : onlineRoom.guest ? `${onlineRoom.host} vs ${onlineRoom.guest}` : 'WAITING FOR PLAYER') : 'WAITING FOR PLAYER · LOCAL ROOM'}</span>
+                  <span>{onlineRoom ? (onlineRoom.phase === 'playing' ? `MATCH LIVE · ${onlineRoom.players.length}/${onlineRoom.maxPlayers} PLAYERS` : `${onlineRoom.format.toUpperCase()} · ${onlineRoom.players.length}/${onlineRoom.maxPlayers} PLAYERS`) : 'WAITING FOR PLAYER · LOCAL ROOM'}</span>
                   <div className="room-actions compact">
                     <button type="button" className="min-w-[120px]" onClick={copyRoomCode}>COPY CODE</button>
                     <button type="button" className="min-w-[120px]" onClick={copyRoomLink}>SHARE ROOM</button>
@@ -459,22 +481,6 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
               <strong>LOCAL CAMERA READY</strong>
               <span>Landmark AI scoring enabled per frame.</span>
               <button onClick={() => onSelect('local')}>ENTER 1V1 <span>↗</span></button>
-            </div>
-          )}
-
-          {mode === 'AURA MUTATION' && (
-            <div className="mode-ready">
-              <strong>AURA MUTATION READY</strong>
-              <span>Mutations are selected from your archetype and the trend pack rotates per round.</span>
-              <button onClick={() => onSelect('mutation')}>ENTER MUTATION <span>↗</span></button>
-            </div>
-          )}
-
-          {mode === 'AURA SANDBOX' && (
-            <div className="mode-ready">
-              <strong>AURA SANDBOX READY</strong>
-              <span>Seed-based terrain, mining, loot, hostile creatures, and movement-driven mutation abilities are enabled in the local prototype.</span>
-              <button onClick={() => onSelect('mutation')}>ENTER SANDBOX <span>↗</span></button>
             </div>
           )}
 
@@ -502,6 +508,9 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
                 guest: onlineRoom.guest,
                 isHost,
                 phase: onlineRoom.phase,
+                format: onlineRoom.format,
+                maxPlayers: onlineRoom.maxPlayers,
+                players: onlineRoom.players,
               } : undefined)}>OPEN ONLINE BATTLE <span>↗</span></button>
             </div>
           )}

@@ -1,4 +1,5 @@
 import type { GameMode } from '../game/types';
+import { getAccessToken } from './auth';
 
 export const DEFAULT_STARTING_RATING = 1200;
 const STORAGE_KEY = 'aura-battle-rank-store-v1';
@@ -15,6 +16,12 @@ export type RankProfile = {
   tier: string;
   lastUpdated: string;
 };
+
+function resolveRankApiUrl(path: string): string {
+  if (typeof window === 'undefined') return `http://localhost:3001${path}`;
+  if (['localhost', '127.0.0.1', '0.0.0.0'].includes(window.location.hostname)) return `http://localhost:3001${path}`;
+  return `${window.location.origin}${path}`;
+}
 
 function normalizeName(name: string | null | undefined): string {
   const trimmed = (name ?? '').trim();
@@ -152,4 +159,56 @@ export function getLeaderboard(): RankProfile[] {
       tier: getTierName(Number.isFinite(profile.rating) ? Math.max(0, Math.round(profile.rating)) : DEFAULT_STARTING_RATING),
     }))
     .sort((left, right) => right.rating - left.rating);
+}
+
+export async function syncRankResult(
+  playerA: string | null | undefined,
+  playerB: string | null | undefined,
+  outcome: RankOutcome,
+): Promise<RankProfile[] | null> {
+  try {
+    const token = await getAccessToken();
+    const response = await fetch(resolveRankApiUrl('/api/rank/match'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ playerA: normalizeName(playerA), playerB: normalizeName(playerB), outcome }),
+    });
+    if (!response.ok) return null;
+    const payload = await response.json() as { profiles?: RankProfile[] };
+    return Array.isArray(payload.profiles) ? payload.profiles : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function syncTeamRankResult(
+  teamA: string[],
+  teamB: string[],
+  outcome: RankOutcome,
+): Promise<RankProfile[] | null> {
+  try {
+    const token = await getAccessToken();
+    const response = await fetch(resolveRankApiUrl('/api/rank/team-match'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ teamA, teamB, outcome }),
+    });
+    if (!response.ok) return null;
+    const payload = await response.json() as { profiles?: RankProfile[] };
+    return Array.isArray(payload.profiles) ? payload.profiles : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getGlobalLeaderboard(): Promise<RankProfile[]> {
+  try {
+    const token = await getAccessToken();
+    const response = await fetch(resolveRankApiUrl('/api/rank/leaderboard'), { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+    if (!response.ok) return [];
+    const payload = await response.json() as { profiles?: RankProfile[] };
+    return Array.isArray(payload.profiles) ? payload.profiles : [];
+  } catch {
+    return [];
+  }
 }
