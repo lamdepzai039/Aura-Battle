@@ -85,7 +85,12 @@ export function sanitizeRoomCode(value: string) {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
 }
 
-export function resolveLobbyUrl(baseUrl = typeof window !== 'undefined' ? window.location.href : 'http://localhost:5173') {
+export function resolveLobbyUrl(baseUrl?: string) {
+  const configuredUrl = import.meta.env.VITE_LOBBY_WS_URL as string | undefined;
+  const currentUrl = typeof window !== 'undefined' ? window.location.href : 'http://localhost:5173';
+  if (configuredUrl && (!baseUrl || baseUrl === currentUrl)) return configuredUrl;
+  const sourceUrl = baseUrl ?? currentUrl;
+  baseUrl = sourceUrl;
   if (!baseUrl) return 'ws://localhost:3001';
 
   if (baseUrl.startsWith('ws://') || baseUrl.startsWith('wss://')) {
