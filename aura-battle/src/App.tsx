@@ -55,6 +55,7 @@ export default function App() {
   const [pendingMode, setPendingMode] = useState<GameMode>('local');
   const [transitionTarget, setTransitionTarget] = useState<'battle' | null>(null);
   const [onlineLobby, setOnlineLobby] = useState<OnlineLobbySession | null>(null);
+  const [cameraPromptOpen, setCameraPromptOpen] = useState(false);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
   const [peerConnected, setPeerConnected] = useState<Record<string, boolean>>({});
   const [screenSharing, setScreenSharing] = useState(false);
@@ -386,6 +387,7 @@ export default function App() {
     if (mode === 'online') {
       setPendingMode('online');
       setOnlineLobby(onlineContext ?? null);
+      setCameraPromptOpen(onlineContext?.phase === 'playing');
       setPhase('online_waiting');
       return;
     }
@@ -393,7 +395,7 @@ export default function App() {
     setPhase('camera_check');
   }} onBack={() => setPhase('home')} /></Suspense>;
 
-  if (phase === 'camera_check') return <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center bg-[#050816] text-xs font-display tracking-[0.3em] text-cyan-300">LOADING CAMERA…</div>}><div className="fixed inset-0 flex flex-col items-center justify-center px-6 gap-6"><p className="font-display text-xs tracking-[0.3em] text-white/50">CAMERA CHECK</p><div className="w-full max-w-2xl"><CameraView ref={videoRef} status={cameraStatus} onEnable={enableCamera} onVideoReady={attachStreamToVideo} /></div>{cameraStatus === 'granted' && <button onClick={() => setPhase(pendingMode === 'online' ? 'battle' : 'player_setup')} className="px-8 py-3 rounded-full font-display text-sm tracking-wide bg-cyan-400 text-black hover:bg-cyan-300 transition">CONTINUE</button>}<button onClick={() => setPhase('home')} className="text-xs text-white/40 hover:text-white/70 font-display tracking-widest">← BACK</button></div></Suspense>;
+  if (phase === 'camera_check') return <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center bg-[#050816] text-xs font-display tracking-[0.3em] text-cyan-300">LOADING CAMERA…</div>}><div className="fixed inset-0 flex flex-col items-center justify-center px-6 gap-6"><p className="font-display text-xs tracking-[0.3em] text-white/50">CAMERA CHECK</p><div className="w-full max-w-2xl"><CameraView ref={videoRef} status={cameraStatus} onEnable={enableCamera} onVideoReady={attachStreamToVideo} /></div>{cameraStatus === 'granted' && <button onClick={() => { if (pendingMode === 'online' && onlineLobby?.phase === 'playing' && !screenSharing) void shareScreen(); setPhase(pendingMode === 'online' ? 'battle' : 'player_setup'); }} className="px-8 py-3 rounded-full font-display text-sm tracking-wide bg-cyan-400 text-black hover:bg-cyan-300 transition">CONTINUE</button>}<button onClick={() => setPhase('home')} className="text-xs text-white/40 hover:text-white/70 font-display tracking-widest">← BACK</button></div></Suspense>;
 
   if (phase === 'player_setup') return <PlayerSetup mode={pendingMode} onBack={() => setPhase('mode_select')} onStart={(p1, p2, prompt) => {
     startMatch(pendingMode, prompt);
@@ -421,6 +423,21 @@ export default function App() {
     isHost: onlineLobby?.isHost ?? true,
   });
 
+  function enterOnlineMatch(showCamera = false) {
+    const battleNames = resolveBattleSeatNames({
+      currentPlayer: username || 'PLAYER',
+      host: onlineLobby?.host ?? username ?? 'PLAYER',
+      guest: onlineLobby?.guest ?? 'RIVAL',
+      isHost: onlineLobby?.isHost ?? true,
+    });
+    startMatch('online', undefined, undefined, onlineLobby?.matchSeed ?? Date.now());
+    if (onlineLobby?.phase === 'playing' && !showCamera) void shareScreen();
+    if (showCamera && cameraStatus !== 'granted') void enableCamera();
+    setPlayerName('p1', battleNames.p1);
+    setPlayerName('p2', battleNames.p2);
+    setPhase(onlineLobby?.phase === 'playing' ? 'camera_check' : 'battle');
+  }
+
   if (phase === 'online_waiting') return <div className="fixed inset-0 flex flex-col items-center justify-center px-6 gap-6 bg-[#050816]">
     <div className="text-center space-y-4">
       <p className="font-display text-[10px] tracking-[0.32em] text-cyan-300/80">{onlineLobby?.phase === 'playing' ? 'MATCH FOUND' : 'ONLINE ROOM STATUS'}</p>
@@ -446,22 +463,25 @@ export default function App() {
     </div>
 
     <div className="flex flex-wrap items-center justify-center gap-3">
-      <button onClick={() => {
-        const battleNames = resolveBattleSeatNames({
-          currentPlayer: username || 'PLAYER',
-          host: onlineLobby?.host ?? username ?? 'PLAYER',
-          guest: onlineLobby?.guest ?? 'RIVAL',
-          isHost: onlineLobby?.isHost ?? true,
-        });
-        startMatch('online', undefined, undefined, onlineLobby?.matchSeed ?? Date.now());
-        setPlayerName('p1', battleNames.p1);
-        setPlayerName('p2', battleNames.p2);
-        setPhase(onlineLobby?.phase === 'playing' ? 'camera_check' : 'battle');
-      }} className="rounded-full bg-cyan-400 px-7 py-3 font-display text-sm tracking-[0.2em] text-black hover:bg-cyan-300 transition disabled:opacity-50" disabled={false}>
+      <button onClick={() => enterOnlineMatch()} className="rounded-full bg-cyan-400 px-7 py-3 font-display text-sm tracking-[0.2em] text-black hover:bg-cyan-300 transition disabled:opacity-50" disabled={false}>
         {onlineLobby?.phase === 'playing' ? 'ENTER ONLINE MATCH' : onlineLobby?.isHost ? 'START BATTLE' : 'ENTER MATCH'}
       </button>
       <button onClick={() => setPhase('mode_select')} className="rounded-full border border-white/15 bg-white/5 px-6 py-3 font-display text-[10px] tracking-[0.24em] text-white/80 hover:bg-white/10 transition">BACK TO LOBBY</button>
     </div>
+
+    {cameraPromptOpen && onlineLobby?.phase === 'playing' && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 px-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="camera-consent-title">
+        <div className="w-full max-w-md space-y-5 rounded-2xl border border-cyan-300/30 bg-[#07111c] p-6 text-center shadow-[0_0_50px_rgba(34,211,238,0.16)]">
+          <p className="font-display text-[10px] tracking-[0.3em] text-cyan-300">MATCH FOUND</p>
+          <h2 id="camera-consent-title" className="font-display text-xl tracking-[0.12em] text-white">SHOW YOUR CAMERA?</h2>
+          <p className="text-sm text-white/60">Your browser will ask for camera permission before your camera turns on.</p>
+          <div className="flex flex-wrap justify-center gap-3">
+            <button onClick={() => { setCameraPromptOpen(false); enterOnlineMatch(true); }} className="rounded-full bg-cyan-400 px-5 py-3 font-display text-xs tracking-[0.16em] text-black hover:bg-cyan-300">YES, SHOW CAMERA</button>
+            <button onClick={() => setCameraPromptOpen(false)} className="rounded-full border border-white/20 px-5 py-3 font-display text-xs tracking-[0.16em] text-white/75 hover:bg-white/10">NOT NOW</button>
+          </div>
+        </div>
+      </div>
+    )}
   </div>;
 
   const totalRounds = match.challengeQueue.length;
