@@ -14,6 +14,7 @@ type OnlineBattleContext = {
   format: RoomFormat;
   maxPlayers: number;
   players: OnlineRoomState['players'];
+  matchSeed: number | null;
 };
 
 function formatQueueTime(milliseconds: number) {
@@ -115,7 +116,7 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
 
     nextSocket.onmessage = (event) => {
       try {
-        const payload = JSON.parse(event.data) as { type?: string; room?: OnlineRoomState; message?: string; you?: string | null };
+        const payload = JSON.parse(event.data) as { type?: string; room?: OnlineRoomState; message?: string; you?: string | null; seed?: number | null };
         if (payload.type === 'room_state' && payload.room) {
           setOnlineRoom(payload.room);
           setRoomCode(payload.room.code);
@@ -136,6 +137,7 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
               format: payload.room.format,
               maxPlayers: payload.room.maxPlayers,
               players: payload.room.players,
+              matchSeed: payload.room.matchSeed,
             });
             return;
           }
@@ -161,6 +163,7 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
             format: payload.room.format,
             maxPlayers: payload.room.maxPlayers,
             players: payload.room.players,
+            matchSeed: payload.seed ?? payload.room.matchSeed,
           });
           return;
         }
@@ -221,6 +224,7 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
             format: payload.room.format,
             maxPlayers: payload.room.maxPlayers,
             players: payload.room.players,
+            matchSeed: payload.room.matchSeed,
           });
           return;
         }
@@ -439,6 +443,7 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
         format: startRoom.format,
         maxPlayers: startRoom.maxPlayers,
         players: startRoom.players,
+        matchSeed: startRoom.matchSeed,
       });
       return;
     }
@@ -592,6 +597,7 @@ export function PlayMode({ username, onSelect, onBack }: { username?: string; on
                 format: onlineRoom.format,
                 maxPlayers: onlineRoom.maxPlayers,
                 players: onlineRoom.players,
+                matchSeed: onlineRoom.matchSeed,
               } : undefined)}>OPEN ONLINE BATTLE <span>↗</span></button>
             </div>
           )}

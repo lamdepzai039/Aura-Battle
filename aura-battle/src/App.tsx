@@ -45,6 +45,7 @@ type OnlineLobbySession = {
   format: RoomFormat;
   maxPlayers: number;
   players: RoomPlayer[];
+  matchSeed: number | null;
 };
 
 export default function App() {
@@ -124,9 +125,10 @@ export default function App() {
   useEffect(() => {
     if (!onlineLobby?.roomCode || !videoRef.current || match.mode !== 'online') return;
     const startPeerLink = async () => {
-      if (!onlineLobby.isHost) return;
+      if (!onlineLobby.isHost || !['countdown', 'challenge'].includes(match.screen)) return;
       const peers = onlineLobby.players.filter((player) => player.id !== localPeerId && player.connected);
       for (const player of peers) {
+        if (peerConnectionsRef.current.has(player.id)) continue;
         const peerConnection = await ensurePeerConnection(player.id);
         if (!peerConnection) continue;
         const offer = await peerConnection.createOffer();
@@ -136,7 +138,7 @@ export default function App() {
     };
 
     void startPeerLink();
-  }, [cameraStatus, ensurePeerConnection, localPeerId, match.mode, onlineLobby, sendPeerSignal, videoRef]);
+  }, [cameraStatus, ensurePeerConnection, localPeerId, match.mode, match.screen, onlineLobby, sendPeerSignal, videoRef]);
 
   useEffect(() => {
     if (!onlineSocketRef.current || !onlineLobby?.roomCode) return;
@@ -331,6 +333,7 @@ export default function App() {
             guest: nextRoom.guest,
             isHost: payload.you === 'host' || current.isHost,
             phase: nextRoom.phase,
+            matchSeed: nextRoom.matchSeed,
           } : current);
         }
 
@@ -349,6 +352,7 @@ export default function App() {
             host: nextRoom.host,
             guest: nextRoom.guest,
             phase: nextRoom.phase,
+            matchSeed: payload.seed ?? nextRoom.matchSeed,
             isHost: current?.isHost ?? nextRoom.host === username,
           } : current);
           setPendingMode('online');
@@ -389,7 +393,7 @@ export default function App() {
     setPhase('camera_check');
   }} onBack={() => setPhase('home')} /></Suspense>;
 
-  if (phase === 'camera_check') return <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center bg-[#050816] text-xs font-display tracking-[0.3em] text-cyan-300">LOADING CAMERA…</div>}><div className="fixed inset-0 flex flex-col items-center justify-center px-6 gap-6"><p className="font-display text-xs tracking-[0.3em] text-white/50">CAMERA CHECK</p><div className="w-full max-w-2xl"><CameraView ref={videoRef} status={cameraStatus} onEnable={enableCamera} onVideoReady={attachStreamToVideo} /></div>{cameraStatus === 'granted' && <button onClick={() => setPhase('player_setup')} className="px-8 py-3 rounded-full font-display text-sm tracking-wide bg-cyan-400 text-black hover:bg-cyan-300 transition">CONTINUE</button>}<button onClick={() => setPhase('home')} className="text-xs text-white/40 hover:text-white/70 font-display tracking-widest">← BACK</button></div></Suspense>;
+  if (phase === 'camera_check') return <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center bg-[#050816] text-xs font-display tracking-[0.3em] text-cyan-300">LOADING CAMERA…</div>}><div className="fixed inset-0 flex flex-col items-center justify-center px-6 gap-6"><p className="font-display text-xs tracking-[0.3em] text-white/50">CAMERA CHECK</p><div className="w-full max-w-2xl"><CameraView ref={videoRef} status={cameraStatus} onEnable={enableCamera} onVideoReady={attachStreamToVideo} /></div>{cameraStatus === 'granted' && <button onClick={() => setPhase(pendingMode === 'online' ? 'battle' : 'player_setup')} className="px-8 py-3 rounded-full font-display text-sm tracking-wide bg-cyan-400 text-black hover:bg-cyan-300 transition">CONTINUE</button>}<button onClick={() => setPhase('home')} className="text-xs text-white/40 hover:text-white/70 font-display tracking-widest">← BACK</button></div></Suspense>;
 
   if (phase === 'player_setup') return <PlayerSetup mode={pendingMode} onBack={() => setPhase('mode_select')} onStart={(p1, p2, prompt) => {
     startMatch(pendingMode, prompt);
@@ -449,7 +453,7 @@ export default function App() {
           guest: onlineLobby?.guest ?? 'RIVAL',
           isHost: onlineLobby?.isHost ?? true,
         });
-        startMatch('online', undefined, undefined, Date.now());
+        startMatch('online', undefined, undefined, onlineLobby?.matchSeed ?? Date.now());
         setPlayerName('p1', battleNames.p1);
         setPlayerName('p2', battleNames.p2);
         setPhase(onlineLobby?.phase === 'playing' ? 'camera_check' : 'battle');
